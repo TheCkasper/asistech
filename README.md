@@ -39,13 +39,14 @@ Aunque el equipo acordó MySQL, el servidor observado actualmente es **MariaDB 1
 |---|---|
 | `main.py` | Modelos de entrada y endpoints FastAPI |
 | `database.py` | Lectura de `.env`, creación de `engine` y prueba de conexión |
-| `.env` | Configuración privada de BD |
+| `.env` | Configuración privada de BD (no se sube a Git) |
+| `.env.example` | Plantilla de ejemplo con las variables requeridas para la conexión a la BD |
 | `.gitignore` | Excluir credenciales y archivos generados |
 | `.venv/` | Python y dependencias del proyecto |
 | `README.md` | Esta guía |
 | `requirements.txt` | Versiones para reproducir el entorno; generarlo antes de compartir |
 
-Todos los archivos están al mismo nivel excepto el contenido de `.venv/`. El proyecto se gestiona mediante el repositorio en GitHub (`https://github.com/TheCkasper/asistech.git`). Cada persona que ejecute el backend crea su propio `.env` y `.venv`.
+Todos los archivos están al mismo nivel excepto el contenido de `.venv/`. El proyecto se gestiona mediante el repositorio en GitHub (`https://github.com/TheCkasper/asistech.git`). Cada persona que clone o ejecute el backend debe crear su propio `.env` a partir de `.env.example` y su propio `.venv`.
 
 ## 4. Control de versiones con Git y gestión de ramas
 
@@ -189,6 +190,16 @@ Generarlo en el entorno que ya funciona y compartirlo. Para reproducir esas vers
 
 ### Configuración privada: `.env`
 
+El repositorio incluye el archivo `.env.example` como plantilla de ejemplo para que los integrantes configuren su conexión sin exponer contraseñas reales en Git. 
+
+Para crear tu archivo de configuración, haz una copia de `.env.example` llamándola `.env`:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+Luego abre `.env` y coloca los datos reales de tu base de datos:
+
 ```dotenv
 DB_HOST=127.0.0.1
 DB_PORT=3306
@@ -209,7 +220,7 @@ __pycache__/
 
 No compartir `.env`, credenciales o capturas de contraseñas. Para la API y para Marcos, utilizar usuarios propios con permisos limitados a `asistech`; usar root solamente para tareas administrativas iniciales.
 
-## 6. Docker: localizar y encender la base de datos
+## 6. Docker: localizar y encender la base de datos (Opcional si usas docker, si no se usa docker omitir este paso)
 
 Abrir Docker Desktop. El contenedor existente pertenece a otro proyecto; mantener sus bases y configuración intactas.
 
