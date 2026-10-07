@@ -45,9 +45,95 @@ Aunque el equipo acordó MySQL, el servidor observado actualmente es **MariaDB 1
 | `README.md` | Esta guía |
 | `requirements.txt` | Versiones para reproducir el entorno; generarlo antes de compartir |
 
-Todos los archivos están al mismo nivel excepto el contenido de `.venv/`. Emanuel debe compartir `main.py`, `database.py`, este README y `requirements.txt`. Este README no reemplaza los archivos de código. Cada persona que ejecute el backend crea su propio `.env` y `.venv`.
+Todos los archivos están al mismo nivel excepto el contenido de `.venv/`. El proyecto se gestiona mediante el repositorio en GitHub (`https://github.com/TheCkasper/asistech.git`). Cada persona que ejecute el backend crea su propio `.env` y `.venv`.
 
-## 4. Preparar el backend en otra computadora
+## 4. Control de versiones con Git y gestión de ramas
+
+El repositorio cuenta con ramas de trabajo individuales para que cada miembro del equipo avance en su área sin interferir con el código de los demás ni comprometer la rama principal:
+
+| Rama | Responsable | Propósito |
+|---|---|---|
+| `main` | Equipo completo | Rama principal estable. Contiene las versiones funcionales e integradas |
+| `emanuel` | Emanuel | Backend con FastAPI, endpoints, modelos Pydantic y lógica de BD |
+| `marcos` | Marcos | Administración de base de datos, consultas SQL y desarrollo del dashboard |
+| `juan` | Juan | Aplicación móvil Android, lectura de tarjetas NFC y peticiones HTTP |
+
+### Consultar las ramas existentes
+
+Para saber en qué rama estás ubicado y qué ramas locales tienes disponibles en tu terminal:
+
+```powershell
+git branch
+```
+
+*(La rama en la que te encuentras aparecerá marcada con un asterisco `*`)*.
+
+Para ver todas las ramas, incluyendo las ramas remotas subidas a GitHub:
+
+```powershell
+git branch -a
+```
+
+### Cómo cambiarse de rama
+
+Para cambiarte a la rama de otro integrante o a la tuya propia, puedes usar tanto el comando tradicional `git checkout` como el comando moderno `git switch`:
+
+#### Cambiarse a la rama de Marcos:
+```powershell
+git checkout marcos
+# o alternativamente:
+git switch marcos
+```
+
+#### Cambiarse a la rama de Juan:
+```powershell
+git checkout juan
+# o alternativamente:
+git switch juan
+```
+
+#### Cambiarse a la rama de Emanuel:
+```powershell
+git checkout emanuel
+# o alternativamente:
+git switch emanuel
+```
+
+#### Regresar a la rama principal (`main`):
+```powershell
+git checkout main
+# o alternativamente:
+git switch main
+```
+
+### Si la rama aún no aparece en tu máquina local
+
+Si un compañero creó o subió una rama a GitHub y al ejecutar `git branch` no la encuentras:
+
+```powershell
+# 1. Descargar las referencias y ramas remotas actualizadas
+git fetch origin
+
+# 2. Cambiarte a la rama (Git creará automáticamente la copia local con seguimiento)
+git checkout marcos
+# o: git checkout juan
+```
+
+### Flujo recomendado al trabajar con ramas
+
+1. **Antes de cambiarte de rama**: Revisa que tu entorno esté limpio con `git status`. Si tienes cambios pendientes en tu rama que no quieres perder, guárdalos temporalmente con `git stash` o haz commit (`git commit -am "avance"`) antes de cambiarte para evitar sobreescrituras accidentales.
+2. **Al entrar a una rama**: Descarga siempre la versión más reciente del repositorio remoto:
+   ```powershell
+   git pull origin <nombre_de_la_rama>
+   ```
+3. **Al terminar tus cambios**: Sube tus avances a tu rama en GitHub:
+   ```powershell
+   git add .
+   git commit -m "Descripción de los cambios realizados"
+   git push origin <nombre_de_la_rama>
+   ```
+
+## 5. Preparar el backend en otra computadora
 
 Solo necesario para quien vaya a ejecutar una copia de la API. Juan no necesita hacerlo para usar la API compartida.
 
@@ -123,7 +209,7 @@ __pycache__/
 
 No compartir `.env`, credenciales o capturas de contraseñas. Para la API y para Marcos, utilizar usuarios propios con permisos limitados a `asistech`; usar root solamente para tareas administrativas iniciales.
 
-## 5. Docker: localizar y encender la base de datos
+## 6. Docker: localizar y encender la base de datos
 
 Abrir Docker Desktop. El contenedor existente pertenece a otro proyecto; mantener sus bases y configuración intactas.
 
@@ -161,7 +247,7 @@ docker exec -it NOMBRE_REAL_DEL_CONTENEDOR mariadb -u root -p
 
 HeidiSQL puede permanecer abierto mientras se ejecutan estos comandos. `No such container` significa nombre/ID incorrecto, no conflicto con HeidiSQL.
 
-## 6. Base de datos y tabla definitiva
+## 7. Base de datos y tabla definitiva
 
 Ejecutar SQL en HeidiSQL: conectarse, abrir **Consulta**, pegar SQL y pulsar **F9**. La tabla elegida es `asistencia_nfc`; `marcajes` fue una propuesta anterior y la API no la utiliza.
 
@@ -234,7 +320,7 @@ SHOW INDEX FROM asistencia_nfc;
 SELECT COUNT(*) AS total_registros FROM asistencia_nfc;
 ```
 
-## 7. Comprobar la conexión y levantar la API
+## 8. Comprobar la conexión y levantar la API
 
 En una terminal del proyecto:
 
@@ -290,7 +376,7 @@ Invoke-RestMethod -Uri "http://192.168.1.25:8000/api/salud" -Method Get
 
 Si están en casas distintas, coordinar VPN o despliegue en servidor. La IP privada no permite acceso directo por internet. El cronograma incluye BD en la nube: esa parte todavía requiere despliegue y pruebas.
 
-## 8. Contrato de POST para Juan
+## 9. Contrato de POST para Juan
 
 **Método:** POST. **Ruta:** `/api/asistencia`. **Cabecera:** `Content-Type: application/json`. **Autenticación:** no implementada en la versión local.
 
@@ -362,7 +448,7 @@ Ejemplo de 409: `{"detail":"El id_evento ya existe con otros datos."}`. Ejemplo 
 
 Para probar HTTP local en Android, revisar la política de tráfico sin cifrar. Si aparece `CLEARTEXT communication not permitted`, Juan debe configurar una excepción en la variante de depuración; por ejemplo, `android:usesCleartextTraffic="true"` en `<application>` del manifest de debug si no hay una política de red que lo reemplace. No llevar esa excepción general al despliegue final; allí utilizar HTTPS. En un emulador Android estándar ejecutado en la computadora de Emanuel, `10.0.2.2` permite acceder al host; en un teléfono real se usa la IP LAN de Emanuel. Si el emulador corre en la computadora de Juan, `10.0.2.2` apunta al equipo de Juan, no al de Emanuel.
 
-## 9. Pruebas desde Swagger y PowerShell
+## 10. Pruebas desde Swagger y PowerShell
 
 ### Swagger
 
@@ -410,7 +496,7 @@ La variable conserva el mismo cuerpo para ambos envíos. Generar un nuevo UUID p
 
 No detener el contenedor compartido para simular fallos sin coordinar, porque contiene otros proyectos. Hacer pruebas de caída en un entorno aislado si se necesitan.
 
-## 10. Marcos: acceso y verificación de datos
+## 11. Marcos: acceso y verificación de datos
 
 Para trabajo local en el equipo de Emanuel, utilizar HeidiSQL con host `127.0.0.1` y puerto publicado, actualmente 3306. Para conectarse desde el equipo de Marcos en la LAN:
 
@@ -482,7 +568,7 @@ app.add_middleware(
 
 Son ejemplos de direcciones del frontend, no del backend. CORS es una política del navegador; no se resuelve cambiando los permisos de MySQL y no autentica usuarios. Una app Android nativa no necesita CORS.
 
-## 11. Errores frecuentes
+## 12. Errores frecuentes
 
 | Mensaje o síntoma | Qué revisar |
 |---|---|
@@ -502,10 +588,12 @@ Son ejemplos de direcciones del frontend, no del backend. CORS es una política 
 | App Android bloquea HTTP | Configuración de tráfico sin cifrar para depuración |
 | Navegador bloquea frontend por CORS | Configurar orígenes exactos en FastAPI |
 | Hora parece adelantada 6 horas | `fecha_hora` está guardada en UTC; convertir al mostrar |
+| `error: Your local changes... overwritten by checkout` | Guardar cambios con `git stash` o hacer `git commit` antes de cambiar de rama |
+| `error: pathspec '...' did not match any file(s)` | Ejecutar `git fetch origin` para actualizar la lista de ramas remotas de GitHub |
 
 El script `database.py` y la API ocultan detalles SQL en sus mensajes. Si aparece un error genérico y las revisiones no lo resuelven, Emanuel debe revisar el diagnóstico local sin publicar credenciales ni detalles internos en las respuestas HTTP.
 
-## 12. Cierre de semana 1 y pendientes
+## 13. Cierre de semana 1 y pendientes
 
 Cronograma: semana 1 del 6 al 9 de octubre de 2026; primera prueba física el sábado 10. Emanuel debe programar la API y POST; Marcos preparar la BD en servidor de paga; Juan leer NFC y enviar a la API. La entrega local está avanzada, pero la integración física y la nube todavía deben comprobarse.
 
@@ -522,8 +610,9 @@ Antes de la prueba:
 
 La semana 2 incorpora IA, sincronización offline y dashboard; la semana 3 integración de IA con producción y pruebas finales. No afirmar que ya existen modelos predictivos, usuarios autenticados, control de alumnos, consulta web de asistencia o despliegue público.
 
-## 13. Referencias oficiales
+## 14. Referencias oficiales
 
+- Documentación oficial de Git: https://git-scm.com/doc
 - Python en Windows: https://docs.python.org/3/using/windows.html
 - Entornos virtuales: https://docs.python.org/3/library/venv.html
 - FastAPI: https://fastapi.tiangolo.com/
