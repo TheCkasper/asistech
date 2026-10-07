@@ -58,6 +58,7 @@ El repositorio cuenta con ramas de trabajo individuales para que cada miembro de
 | `emanuel` | Emanuel | Backend con FastAPI, endpoints, modelos Pydantic y lógica de BD |
 | `marcos` | Marcos | Administración de base de datos, consultas SQL y desarrollo del dashboard |
 | `juan` | Juan | Aplicación móvil Android, lectura de tarjetas NFC y peticiones HTTP |
+| `julia` | Julia | Documentación de requisitos, flujo real y resultados de pruebas |
 
 ### Consultar las ramas existentes
 
@@ -100,6 +101,13 @@ git checkout emanuel
 git switch emanuel
 ```
 
+#### Cambiarse a la rama de Julia:
+```powershell
+git checkout julia
+# o alternativamente:
+git switch julia
+```
+
 #### Regresar a la rama principal (`main`):
 ```powershell
 git checkout main
@@ -118,6 +126,7 @@ git fetch origin
 # 2. Cambiarte a la rama (Git creará automáticamente la copia local con seguimiento)
 git checkout marcos
 # o: git checkout juan
+# o: git checkout julia
 ```
 
 ### Flujo recomendado al trabajar con ramas
