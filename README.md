@@ -60,6 +60,51 @@ El repositorio cuenta con ramas de trabajo individuales para que cada miembro de
 | `juan` | Juan | Aplicación móvil Android, lectura de tarjetas NFC y peticiones HTTP |
 | `julia` | Julia | Documentación de requisitos, flujo real y resultados de pruebas |
 
+### Cómo clonar el repositorio paso a paso (Git Bash)
+
+Si vas a descargar el proyecto por primera vez en tu computadora:
+
+1. **Abrir la carpeta contenedora en Windows**:
+   Abre el Explorador de Archivos y navega hasta la carpeta donde quieras guardar el proyecto (por ejemplo, `Documentos\Proyectos` o en tu disco de preferencia).
+
+2. **Abrir Git Bash en esa ubicación**:
+   - Haz clic derecho en un espacio vacío dentro de la carpeta.
+   - Selecciona la opción **"Git Bash Here"**.
+   - *(En Windows 11, si no lo ves de inmediato, haz clic en **Mostrar más opciones** y luego en **Git Bash Here**)*.
+
+3. **Clonar el repositorio**:
+   En la terminal de Git Bash que se acaba de abrir, copia y ejecuta:
+   ```bash
+   git clone https://github.com/TheCkasper/asistech.git
+   ```
+
+4. **Entrar a la carpeta del proyecto recién descargado**:
+   ```bash
+   cd asistech
+   ```
+
+5. **Cambiarse a tu rama de trabajo**:
+   Al clonar, por defecto estarás ubicado en la rama principal (`main`). Para moverte a tu rama correspondiente:
+   ```bash
+   git checkout <nombre_de_la_rama>
+   # o alternativamente:
+   git switch <nombre_de_la_rama>
+   ```
+
+   **Ejemplos según tu rol:**
+   - **Emanuel**: `git checkout emanuel` *(o `git switch emanuel`)*
+   - **Marcos**: `git checkout marcos` *(o `git switch marcos`)*
+   - **Juan**: `git checkout juan` *(o `git switch juan`)*
+   - **Julia**: `git checkout julia` *(o `git switch julia`)*
+
+6. **Confirmar en qué rama estás**:
+   ```bash
+   git branch
+   ```
+   *(Verás la lista de ramas y la tuya estará marcada con un asterisco `*`)*.
+
+---
+
 ### Consultar las ramas existentes
 
 Para saber en qué rama estás ubicado y qué ramas locales tienes disponibles en tu terminal:
