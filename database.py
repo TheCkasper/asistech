@@ -9,11 +9,11 @@ load_dotenv(Path(__file__).resolve().parent / ".env")
 
 url = URL.create(
     drivername="mysql+pymysql",
-    username=os.environ["DB_USER"],
-    password=os.environ["DB_PASSWORD"],
-    host=os.environ["DB_HOST"],
-    port=int(os.environ["DB_PORT"]),
-    database=os.environ["DB_NAME"],
+    username=os.getenv("DB_USER", "root"),
+    password=os.getenv("DB_PASSWORD", "root"),
+    host=os.getenv("DB_HOST", "127.0.0.1"),
+    port=int(os.getenv("DB_PORT", "3306")),
+    database=os.getenv("DB_NAME", "asistech"),
     query={"charset": "utf8mb4"},
 )
 
@@ -31,8 +31,8 @@ if __name__ == "__main__":
 
         print("Conexión exitosa con la base de datos ASISTECH.")
 
-    except SQLAlchemyError:
+    except SQLAlchemyError as err:
         print(
-            "No se pudo conectar. Revisa los datos del archivo .env "
-            "y que el contenedor de MariaDB esté encendido."
+            f"No se pudo conectar: {err}. Revisa los datos del archivo .env "
+            "y que el contenedor o servicio de MariaDB/MySQL esté encendido."
         )

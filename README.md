@@ -10,13 +10,17 @@ Ya se comprobó localmente: recepción de JSON con FastAPI, conexión a MariaDB,
 |---|---|
 | GET `/api/salud` | Implementado; responde `{"estado":"ok"}` |
 | POST `/api/asistencia` | Implementado; valida y guarda marcajes |
+| GET `/api/asistencia` | Implementado; permite registro directo por enlace web NFC |
+| GET `/api/dashboard` | Implementado; consulta asistencias de hoy, total y alertas de IA desde MariaDB |
+| PATCH `/api/alertas/{id}` | Implementado; marca alertas de IA como revisadas en la base de datos |
+| Dashboard Web en tiempo real | Implementado (`Panel_de_asistencia.html`) con sondeo periódico hacia la API |
 | Control de duplicados | Implementado por `id_evento` único |
 | Conversión de hora del marcaje a UTC | Implementada |
-| Lectura NFC desde el teléfono | Responsabilidad de Juan; integración pendiente |
-| Base de datos en la nube | Pendiente; actualmente local en Docker |
-| Dashboard y consulta de asistencias por API | Pendientes; no existe un GET de asistencias |
-| Modelo de IA | Semana 2; todavía no implementado |
-| Autenticación, alumnos y asignación de tarjetas | Todavía no implementados |
+| Prueba con tarjeta física NFC | Realizada exitosamente con UID real y sincronizada en vivo con el dashboard |
+| Lectura NFC automática desde el teléfono | En desarrollo; responsabilidad de Juan mediante app Android nativa |
+| Base de datos en la nube | Pendiente; actualmente local en MariaDB/Docker |
+| Modelo de IA | Semana 2; base de datos preparada con tablas y vistas (`alerta_ia`, `vw_alertas_abiertas`) |
+| Autenticación de usuarios | Pendiente para etapas posteriores |
 
 La API acepta UID y establecimiento con formato válido, pero todavía no comprueba si existen o si la tarjeta pertenece a un alumno. Una lectura guardada no prueba por sí sola la presencia de ese alumno. El control de duplicados evita reintentos del mismo evento, no dos lecturas físicas que tengan UUID diferentes.
 
@@ -675,7 +679,131 @@ Antes de la prueba:
 
 La semana 2 incorpora IA, sincronización offline y dashboard; la semana 3 integración de IA con producción y pruebas finales. No afirmar que ya existen modelos predictivos, usuarios autenticados, control de alumnos, consulta web de asistencia o despliegue público.
 
-## 14. Referencias oficiales
+## 14. Guía de pruebas con tarjeta física NFC y coordinación con la App Android (Juan)
+
+### 14.1. Pruebas realizadas y validación exitosa de la API (Emanuel)
+
+Se realizaron pruebas de extremo a extremo conectando dispositivos en red local (Wi-Fi y Ethernet) con la API de FastAPI y la base de datos MariaDB:
+
+1. **Tarjeta física identificada:** Se utilizó una tarjeta NFC física cuyo identificador de hardware (UID) es **`53B0062D020001`**.
+2. **Asignación en base de datos:** Se dio de alta la tarjeta en la tabla `estudiante` asociada a `Emanuel Baltazar` (`id_estudiante: 4`, grado `1ro Básico A`, establecimiento `1`).
+3. **Petición HTTP desde cliente externo:** Se enviaron peticiones a `http://192.168.1.104:8000/api/asistencia` simulando la llegada de marcajes.
+4. **Respuesta de la API:**
+   * La API procesó el marcaje, lo almacenó en la tabla `asistencia_nfc` con respuesta HTTP 200:
+     ```json
+     {
+       "estado": "guardado",
+       "id_registro": 1,
+       "mensaje": "Marcaje guardado correctamente."
+     }
+     ```
+   * En caso de reintentos con el mismo identificador de evento (`id_evento`), la API respondió correctamente con control de duplicados:
+     ```json
+     {
+       "estado": "ya_registrado",
+       "id_registro": 1,
+       "mensaje": "Este evento ya estaba guardado."
+     }
+     ```
+5. **Visualización en tiempo real:** El panel web (`Panel_de_asistencia.html`) detectó de inmediato el nuevo marcaje mediante sondeo a `GET /api/dashboard?id_establecimiento=1`, actualizando el banner de última lectura (*"Emanuel Baltazar · Llegó a tiempo"*), incrementando el contador de presentes y agregando la entrada al feed en vivo y a la gráfica de intervalos.
+
+---
+
+### 14.2. Comportamiento de las tarjetas físicas escolares (Solo Lectura)
+
+Durante las pruebas con aplicaciones genéricas como *NFC Tools* y *MacroDroid*, se comprobó que la tarjeta física genera un aviso de *"Error de escritura"*.
+
+**Diagnóstico técnico:**
+* La tarjeta física de prueba es de **SOLO LECTURA (Read-Only)** a nivel de hardware, o se encuentra bloqueada de fábrica con sectores protegidos.
+* **Esto es exactamente lo esperado en un entorno escolar:** los carnés, llaveros y tarjetas de los estudiantes vienen protegidos contra escritura para evitar que cualquier persona o estudiante pueda alterarlos, clonarlos o sobreescribir datos en ellos.
+* El sistema ASISTECH **no necesita ni debe escribir datos en la tarjeta**. Solo requiere leer el número de serie único de fábrica (UID).
+
+---
+
+### 14.3. Especificación técnica para la App Android (Responsabilidad de Juan)
+
+Para que el registro funcione de manera automática y fluida en la puerta de la escuela (acercar la tarjeta al teléfono y registrar al instante sin tocar la pantalla), la lectura de bajo nivel corresponde a la **aplicación móvil Android desarrollada por Juan**.
+
+#### Requisitos para la implementación de Juan en Android:
+1. **Lectura por hardware (`NfcAdapter`):**
+   * Configurar el `NfcAdapter` para escuchar tarjetas mediante `ACTION_TAG_DISCOVERED` o `ACTION_TECH_DISCOVERED`.
+   * **No intentar escribir NDEF records en la tarjeta.**
+   * Extraer el UID en crudo desde el Intent:
+     ```java
+     byte[] tagId = intent.getByteArrayExtra(NfcAdapter.EXTRA_ID);
+     ```
+   * Convertir los bytes a una cadena hexadecimal en mayúsculas sin espacios ni separadores:
+     ```java
+     // Ejemplo de resultado esperado por la API: "53B0062D020001"
+     StringBuilder sb = new StringBuilder();
+     for (byte b : tagId) {
+         sb.append(String.format("%02X", b));
+     }
+     String uidNfc = sb.toString();
+     ```
+
+2. **Envío del marcaje a la API:**
+   * Generar un UUID v4 único por cada lectura física para el campo `id_evento`.
+   * Enviar una petición HTTP `POST` a la API:
+     ```http
+     POST http://<IP_SERVIDOR_API>:8000/api/asistencia
+     Content-Type: application/json
+
+     {
+       "id_evento": "c4b3f880-a681-432d-9486-123456789abc",
+       "uid_nfc": "53B0062D020001",
+       "id_establecimiento": 1,
+       "fecha_hora": "2026-10-13T04:20:00Z",
+       "tipo_registro": "ENTRADA"
+     }
+     ```
+   *(Nota: La API ahora también soporta generación automática de `id_evento` y `fecha_hora` en caso de que el cliente móvil omita esos campos durante pruebas preliminares).*
+
+3. **Manejo de respuestas en la App:**
+   * **`200 OK` con `estado: "guardado"`:** Marcaje exitoso. La app de Juan debe emitir un sonido o vibración de confirmación verde para el estudiante.
+   * **`200 OK` con `estado: "ya_registrado"`:** El marcaje ya fue recibido previamente (evita entradas duplicadas accidentales).
+   * **`409 Conflict`:** Conflicto de datos con el mismo `id_evento`.
+   * **`503 Service Unavailable`:** Error temporal de la base de datos o backend.
+
+---
+
+### 14.4. Procedimiento para registrar nuevas tarjetas NFC (Tarjetas que tiene Juan)
+
+Dado que **Juan tiene en su poder las tarjetas físicas de prueba**, es indispensable seguir este procedimiento antes de probarlas en el colegio o con la app:
+
+#### 1. Obtener el código UID de cada tarjeta:
+* Juan debe acercar cada tarjeta al teléfono usando cualquier lector NFC (por ejemplo, la pestaña **LEER** de la app gratuita *NFC Tools*).
+* Anotar el **Tag ID / Número de serie / UID** que muestre la pantalla.
+* Limpiar el código eliminando espacios y dos puntos, dejándolo en **hexadecimal en mayúsculas** (por ejemplo: si lee `53:b0:06:2d:02:00:01`, el código es `53B0062D020001`).
+
+#### 2. Recordatorio crítico: Las tarjetas están en MODO SOLO LECTURA
+* **NO intentar escribir datos ni grabar texto/URLs en las tarjetas:** Como se comprobó en las pruebas físicas, estas tarjetas vienen bloqueadas de fábrica en **modo solo lectura (Read-Only)**. Intentar grabarlas con NFC Tools, MacroDroid o cualquier otra herramienta arrojará *"Error de escritura"*.
+* **Esto es normal y seguro:** Las tarjetas escolares no se escriben; únicamente se lee su UID de hardware existente.
+
+#### 3. Registrar las tarjetas en la Base de Datos (`estudiante`):
+Para que al pasar la tarjeta el panel web muestre el nombre del alumno (y no la leyenda *"UID sin registrar"*), cada tarjeta debe registrarse previamente en la tabla `estudiante` de la base de datos `asistech`.
+
+Marcos o Emanuel pueden ejecutar la siguiente consulta SQL en HeidiSQL, DBeaver o phpMyAdmin con los códigos de las tarjetas que tenga Juan:
+
+```sql
+-- Reemplazar con los UIDs reales leídos por Juan y los nombres de los estudiantes:
+INSERT INTO estudiante (uid_nfc, nombre, grado, seccion, id_establecimiento, activo)
+VALUES 
+    ('UID_DE_TARJETA_1', 'Juan Pérez', '1ro Básico', 'A', 1, 1),
+    ('UID_DE_TARJETA_2', 'Carlos Morales', '2do Básico', 'B', 1, 1),
+    ('UID_DE_TARJETA_3', 'Sofía Castillo', '3ro Básico', 'A', 1, 1)
+ON DUPLICATE KEY UPDATE 
+    nombre = VALUES(nombre), 
+    grado = VALUES(grado), 
+    seccion = VALUES(seccion), 
+    activo = 1;
+```
+
+> **Nota:** Si Juan pasa una tarjeta que aún no ha sido registrada en la tabla `estudiante`, la API **igual guardará el marcaje** en `asistencia_nfc` correctamente, pero la vista del dashboard la mostrará como **`UID sin registrar`** hasta que se le asigne un alumno en la base de datos.
+
+---
+
+## 15. Referencias oficiales
 
 - Documentación oficial de Git: https://git-scm.com/doc
 - Python en Windows: https://docs.python.org/3/using/windows.html
@@ -687,4 +815,4 @@ La semana 2 incorpora IA, sincronización offline y dashboard; la semana 3 integ
 - NFC Android: https://developer.android.com/develop/connectivity/nfc
 - Seguridad de red Android: https://developer.android.com/privacy-and-security/security-config
 
-Esta guía describe el código construido durante la sesión. Los comandos de despliegue en LAN, las excepciones Android y CORS son instrucciones de integración pendientes de aplicar y verificar en los dispositivos del equipo.
+Esta guía describe el código construido durante la sesión. Los comandos de despliegue en LAN, las excepciones Android y CORS son instrucciones de integración verificadas en el entorno local del equipo.

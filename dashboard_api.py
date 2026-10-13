@@ -32,7 +32,15 @@ router = APIRouter()
 
 def _a_iso_utc(valor):
     """DATETIME guardado en UTC -> texto ISO 8601 con 'Z' (el dashboard convierte a hora de Guatemala)."""
-    return valor.replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z")
+    if valor is None:
+        return ""
+    if isinstance(valor, str):
+        return valor if valor.endswith("Z") else valor + "Z"
+    if hasattr(valor, "tzinfo") and valor.tzinfo is None:
+        return valor.replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z")
+    if hasattr(valor, "astimezone"):
+        return valor.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+    return str(valor)
 
 
 @router.get("/api/dashboard")
@@ -65,8 +73,9 @@ def dashboard(id_establecimiento: int = Query(1, gt=0)):
                 ),
                 {"e": id_establecimiento},
             ).mappings().all()
-    except Exception:
-        # Igual que en POST: no exponer detalles SQL en la respuesta HTTP.
+    except Exception as err:
+        # Registrar detalle del error en consola para depuración
+        print(f"[Error en /api/dashboard] {err}")
         raise HTTPException(status_code=503, detail="No se pudo consultar el dashboard.")
 
     return {
