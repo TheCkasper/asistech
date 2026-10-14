@@ -534,3 +534,7 @@ La semana 2 incorpora IA, sincronizaciÃ³n offline y dashboard; la semana 3 integ
 - Seguridad de red Android: https://developer.android.com/privacy-and-security/security-config
 
 Esta guÃ­a describe el cÃ³digo construido durante la sesiÃ³n. Los comandos de despliegue en LAN, las excepciones Android y CORS son instrucciones de integraciÃ³n pendientes de aplicar y verificar en los dispositivos del equipo.
+
+## Aplicación Android
+
+La guía de instalación, compilación, conexión con la API y pruebas de la aplicación Android está en [ANDROID.md](ANDROID.md).
