@@ -26,7 +26,7 @@ try:
             return raw_application(environ, start_response)
         except Exception as e:
             error_msg = traceback.format_exc()
-            status = '500 Internal Server Error'
+            status = '200 OK'
             html = f"""
             <!DOCTYPE html>
             <html>
@@ -48,7 +48,7 @@ except Exception as e:
 
     # Captura errores que ocurran al importar los módulos al inicio
     def application(environ, start_response):
-        status = '500 Internal Server Error'
+        status = '200 OK'
         html = f"""
         <!DOCTYPE html>
         <html>

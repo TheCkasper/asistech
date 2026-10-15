@@ -46,7 +46,7 @@ def login_page():
     """Sirve la pantalla de inicio de sesión."""
     archivo_html = BASE_DIR / "login.html"
     if archivo_html.exists():
-        return FileResponse(str(archivo_html), media_type="text/html; charset=utf-8")
+        return HTMLResponse(content=archivo_html.read_text(encoding="utf-8"))
     return {"mensaje": "ASISTECH API activa - Login"}
 
 
@@ -56,7 +56,7 @@ def panel():
     """Sirve el Panel de Asistencia."""
     archivo_html = BASE_DIR / "Panel_de_asistencia.html"
     if archivo_html.exists():
-        return FileResponse(str(archivo_html), media_type="text/html; charset=utf-8")
+        return HTMLResponse(content=archivo_html.read_text(encoding="utf-8"))
     return {"mensaje": "Panel de asistencia no encontrado"}
 
 
