@@ -18,14 +18,14 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        // URL base por defecto (Local)
-        buildConfigField("String", "API_ASISTENCIA_URL", "\"http://10.0.2.2:8000/api/asistencia\"")
+        // URL base de producción en BanaHosting / Cloudflare
+        buildConfigField("String", "API_ASISTENCIA_URL", "\"https://asistech.divinevo.com/api/asistencia\"")
     }
 
     buildTypes {
         debug {
-            // URL para pruebas locales en emulador o servidor local
-            buildConfigField("String", "API_ASISTENCIA_URL", "\"http://10.0.2.2:8000/api/asistencia\"")
+            // URL de producción para pruebas físicas en celular y emulador
+            buildConfigField("String", "API_ASISTENCIA_URL", "\"https://asistech.divinevo.com/api/asistencia\"")
         }
         release {
             // URL de producción en BanaHosting / Cloudflare

@@ -148,8 +148,22 @@
         btnSubmit.disabled = true;
         btnSubmit.innerHTML = '<span>Verificando credenciales...</span>';
 
+        const apiBase = (() => {
+          if (typeof window !== 'undefined' && window.ASISTECH_API_BASE !== undefined) {
+            const custom = String(window.ASISTECH_API_BASE).trim();
+            return custom ? custom.replace(/\/+$/, '') : '';
+          }
+          if (typeof window !== 'undefined' && window.location) {
+            const { protocol, hostname, port } = window.location;
+            if (protocol === 'file:' || !hostname) return 'http://localhost:8000';
+            const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1';
+            if (isLocalhost && port !== '8000') return 'http://localhost:8000';
+          }
+          return '';
+        })();
+
         try {
-          const res = await fetch('/api/login', {
+          const res = await fetch((apiBase ? apiBase : '') + '/api/login', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',

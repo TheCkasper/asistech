@@ -15,25 +15,58 @@
      ===================================================================== */
   const CONFIG = {
     API_BASE: (() => {
-      // 1. Si se define una variable global previa en el HTML/entorno, usarla
+      // 1. Configuración explícita global (permite sobrescribir en cualquier entorno)
       if (typeof window !== 'undefined' && window.ASISTECH_API_BASE !== undefined) {
-        return window.ASISTECH_API_BASE;
+        const custom = String(window.ASISTECH_API_BASE).trim();
+        return custom ? custom.replace(/\/+$/, '') : '';
       }
-      // 2. Si se sirve desde el mismo servidor FastAPI en el puerto 8000
-      if (typeof window !== 'undefined' && window.location) {
-        if (window.location.protocol.startsWith('http') && window.location.port === '8000') {
+
+      if (typeof window === 'undefined' || !window.location) {
+        return 'http://localhost:8000';
+      }
+
+      const { protocol, hostname, port } = window.location;
+
+      // 2. Si se abre mediante file:// o sin hostname
+      if (protocol === 'file:' || !hostname) {
+        return 'http://localhost:8000';
+      }
+
+      const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1';
+
+      // 3. Entorno de desarrollo local (localhost o 127.0.0.1)
+      if (isLocalhost) {
+        // Servido directamente desde FastAPI en el puerto 8000 -> usar rutas relativas
+        if (port === '8000') {
           return '';
         }
-        // 3. Si se accede desde localhost en otro puerto (ej: 5173, 5500, o file://)
-        if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || !window.location.hostname) {
-          return 'http://localhost:8000';
-        }
-        // 4. Si se accede desde otra IP o red local
-        if (window.location.protocol.startsWith('http')) {
-          return `${window.location.protocol}//${window.location.hostname}:8000`;
-        }
+        // Servido desde otro servidor local (ej. Live Server en 5500, Vite en 5173)
+        // comunicarse con el backend FastAPI local en http://localhost:8000
+        return 'http://localhost:8000';
       }
-      return 'http://localhost:8000';
+
+      // 4. Entorno de red local por IP privada (192.168.x.x, 10.x.x.x, 172.16-31.x.x)
+      const isPrivateIP = /^(192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.)/.test(hostname);
+      if (isPrivateIP) {
+        // Si se sirve directamente desde FastAPI en el puerto 8000
+        if (port === '8000') {
+          return '';
+        }
+        // Si se ejecuta desde otro servidor en red local (ej. Live Server en 5500),
+        // no asumimos que el backend siempre está en el mismo host con :8000.
+        // Se informa en consola para definir window.ASISTECH_API_BASE si difiere.
+        console.info(
+          '[ASISTECH] Acceso desde red local (%s:%s). Si el backend difiere, configure window.ASISTECH_API_BASE.',
+          hostname,
+          port
+        );
+        return '';
+      }
+
+      // 5. Entorno de producción (ej. asistech.divinevo.com o cualquier dominio web)
+      // Siempre usar el mismo origen mediante rutas relativas (/api/...)
+      // Sin puertos explícitos como :8000 ni localhost
+      return '';
     })(),
     ID_ESTABLECIMIENTO: (() => {
       if (typeof window !== 'undefined' && window.location && window.location.search) {
@@ -97,7 +130,7 @@
   }
 
   /* ---------- Estado ---------- */
-  const state = { total: 0, lecturas: [], alertas: [], connected: null, updated: null, filter: '' };
+  const state = { total: 0, lecturas: [], alertas: [], connected: null, updated: null, filter: '', errorReason: null };
   let renderedKeys = new Set();
   let lastKey = null;
 
@@ -129,11 +162,29 @@
     const c = $('#conn');
     if (!c) return;
     c.className = 'chip ' + (state.connected === true ? 'ok' : state.connected === false ? 'off' : '');
-    $('#connText').textContent = state.connected === true
-      ? 'Conectado \u00b7 actualizado ' + hhmmss(state.updated)
-      : state.connected === false
-        ? 'Sin conexi\u00f3n con la API \u00b7 reintentando'
-        : 'Conectando con la base de datos...';
+    
+    let texto = 'Conectando con la base de datos...';
+    if (state.connected === true) {
+      texto = 'Conectado \u00b7 actualizado ' + hhmmss(state.updated);
+    } else if (state.connected === false) {
+      texto = 'Sin conexi\u00f3n con la API \u00b7 reintentando';
+    }
+    $('#connText').textContent = texto;
+
+    // Diagnóstico en tooltip para inspección rápida sin alterar la interfaz
+    if (state.connected === false && state.errorReason) {
+      if (state.errorReason === 'network') {
+        c.title = 'Fallo de conexión: No se pudo contactar a la API';
+      } else if (state.errorReason === 'invalid_json') {
+        c.title = 'Fallo de respuesta: La API no devolvió un JSON válido';
+      } else if (state.errorReason.startsWith('http_')) {
+        c.title = 'Fallo del servidor: Error ' + state.errorReason.replace('http_', 'HTTP ');
+      }
+    } else if (state.connected === true) {
+      c.title = 'Conectado a la API ASISTECH (' + (CONFIG.API_BASE || 'mismo origen') + ')';
+    } else {
+      c.title = '';
+    }
   }
 
   function renderLast(d) {
@@ -265,6 +316,13 @@
     renderAlerts();
   }
 
+  /* ---------- Helper centralizado de URLs ---------- */
+  function getApiUrl(path) {
+    const base = (CONFIG.API_BASE || '').trim().replace(/\/+$/, '');
+    const cleanPath = path.startsWith('/') ? path : '/' + path;
+    return base ? `${base}${cleanPath}` : cleanPath;
+  }
+
   /* ---------- Acciones con la API ---------- */
   function removeAlert(id) {
     state.alertas = state.alertas.filter((x) => x.id_alerta !== id);
@@ -274,42 +332,80 @@
   }
 
   function reviewAlert(a) {
-    const url = (CONFIG.API_BASE || '') + '/api/alertas/' + encodeURIComponent(a.id_alerta);
+    const url = getApiUrl('/api/alertas/' + encodeURIComponent(a.id_alerta));
     fetch(url, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
       body: JSON.stringify({ revisada: true })
     }).then((r) => {
-      if (!r.ok) throw new Error('HTTP ' + r.status);
+      if (!r.ok) {
+        console.warn(`[ASISTECH API] Error HTTP ${r.status} al marcar alerta ${a.id_alerta}`);
+        throw new Error('HTTP ' + r.status);
+      }
       removeAlert(a.id_alerta);
     }).catch((err) => {
-      console.error('Error al actualizar la alerta en la BD:', err);
+      console.error('[ASISTECH API] Error al actualizar la alerta en la BD:', err);
       const msg = $('#msg');
       if (msg) msg.textContent = 'No se pudo marcar la alerta como revisada. Intenta de nuevo.';
     });
   }
 
+  let isPolling = false;
+  let pollTimeoutId = null;
+
   function poll() {
-    const url = (CONFIG.API_BASE || '') + '/api/dashboard?id_establecimiento=' + encodeURIComponent(CONFIG.ID_ESTABLECIMIENTO);
+    if (isPolling) return;
+    isPolling = true;
+
+    const url = getApiUrl('/api/dashboard?id_establecimiento=' + encodeURIComponent(CONFIG.ID_ESTABLECIMIENTO));
+
     fetch(url, {
       headers: { Accept: 'application/json' }
     })
       .then((r) => {
-        if (!r.ok) throw new Error('HTTP ' + r.status);
-        return r.json();
+        if (!r.ok) {
+          const httpErr = new Error('HTTP ' + r.status);
+          httpErr.name = 'HttpError';
+          httpErr.status = r.status;
+          throw httpErr;
+        }
+        return r.json().catch((jsonErr) => {
+          const parseErr = new Error('JSON inválido: ' + jsonErr.message);
+          parseErr.name = 'InvalidJsonError';
+          throw parseErr;
+        });
       })
       .then((data) => {
         state.total = Number(data.total_estudiantes) || 0;
         state.lecturas = Array.isArray(data.lecturas) ? data.lecturas : [];
         state.alertas = Array.isArray(data.alertas) ? data.alertas : [];
         state.connected = true;
+        state.errorReason = null;
         state.updated = new Date();
         render();
       })
       .catch((err) => {
-        console.warn('Conexión con la API de ASISTECH no disponible:', err.message);
         state.connected = false;
+        if (err.name === 'HttpError') {
+          console.warn(`[ASISTECH API] Error HTTP ${err.status} al consultar ${url}`);
+          state.errorReason = 'http_' + err.status;
+        } else if (err.name === 'InvalidJsonError') {
+          console.warn(`[ASISTECH API] Respuesta con formato no válido desde ${url}:`, err.message);
+          state.errorReason = 'invalid_json';
+        } else {
+          console.warn(`[ASISTECH API] Error de conexión de red al consultar ${url}:`, err.message || err);
+          state.errorReason = 'network';
+        }
         renderStatus();
+      })
+      .finally(() => {
+        isPolling = false;
+        // Programa la siguiente consulta evitando solicitudes concurrentes
+        if (pollTimeoutId) clearTimeout(pollTimeoutId);
+        pollTimeoutId = setTimeout(poll, CONFIG.INTERVALO_MS);
       });
   }
 
@@ -350,5 +446,4 @@
 
   render();
   poll();
-  setInterval(poll, CONFIG.INTERVALO_MS);
 })();
