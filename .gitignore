@@ -30,7 +30,22 @@ htmlcov/
 mysql_data/
 mariadb_data/
 
-# Archivos del sistema operativo
+# Entornos de desarrollo y editores (PyCharm, Android Studio, VS Code, etc.)
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+*.sublime-workspace
+*.sublime-project
+
+# Archivos del sistema operativo y temporales
 Thumbs.db
+ehthumbs.db
 Desktop.ini
 .DS_Store
+$RECYCLE.BIN/
+*.tmp
+*.bak
+.cache/
+
