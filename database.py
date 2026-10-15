@@ -20,7 +20,10 @@ url = URL.create(
 engine = create_engine(
     url,
     pool_pre_ping=True,
-    connect_args={"connect_timeout": 5},
+    connect_args={
+        "connect_timeout": 3,
+        "read_timeout": 3,
+    },
 )
 
 
