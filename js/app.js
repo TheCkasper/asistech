@@ -320,6 +320,34 @@
     renderFeed(derive());
   });
 
+  // Mostrar usuario logueado en la barra superior
+  try {
+    const rawSesion = localStorage.getItem('asistech_user');
+    if (rawSesion) {
+      const sesion = JSON.parse(rawSesion);
+      const userChip = $('#userChip');
+      const userName = $('#userName');
+      if (userChip && userName) {
+        const nombreCompleto = (sesion.nombre ? `${sesion.nombre} ${sesion.apellido || ''}`.trim() : sesion.usuario) || 'Usuario';
+        userName.textContent = nombreCompleto;
+        userChip.style.display = 'inline-flex';
+      }
+    }
+  } catch (e) {
+    console.warn('Error leyendo sesión local:', e);
+  }
+
+  // Manejador del botón Cerrar Sesión
+  const btnLogout = $('#btnLogout');
+  if (btnLogout) {
+    btnLogout.addEventListener('click', () => {
+      try {
+        localStorage.removeItem('asistech_user');
+      } catch (e) {}
+      window.location.replace('/');
+    });
+  }
+
   render();
   poll();
   setInterval(poll, CONFIG.INTERVALO_MS);

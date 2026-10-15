@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Iniciar Sesión · ASISTECH</title>
+
+  <!-- Fuentes tipográficas -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600&family=Unbounded:wght@500;600&display=swap"
+    rel="stylesheet">
+
+  <!-- Estilos del sistema ASISTECH -->
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+
+<body class="login-body">
+  <main class="login-card" id="loginCard">
+    <div class="login-header">
+      <div class="login-logo" aria-hidden="true">
+        <!-- Ícono de escudo con candado de seguridad -->
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+          <rect x="9" y="11" width="6" height="4" rx="1"/>
+        </svg>
+      </div>
+      <h1>ASISTECH</h1>
+      <p>Control de Asistencia Escolar</p>
+    </div>
+
+    <!-- Mensaje de error dinámico -->
+    <div id="loginError" class="login-error" role="alert" aria-live="polite">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"/>
+        <line x1="12" y1="8" x2="12" y2="12"/>
+        <line x1="12" y1="16" x2="12.01" y2="16"/>
+      </svg>
+      <span id="errorText">Usuario o contraseña incorrectos</span>
+    </div>
+
+    <form id="loginForm" class="login-form" novalidate>
+      <div class="form-group">
+        <label for="txtUsuario">Usuario</label>
+        <div class="input-wrapper">
+          <input
+            id="txtUsuario"
+            name="usuario"
+            class="form-input"
+            type="text"
+            placeholder="Ingresa tu usuario"
+            autocomplete="username"
+            autofocus
+            required>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="txtContrasena">Contraseña</label>
+        <div class="input-wrapper">
+          <input
+            id="txtContrasena"
+            name="contrasena"
+            class="form-input"
+            type="password"
+            placeholder="••••••••"
+            autocomplete="current-password"
+            required>
+          <button
+            id="btnTogglePwd"
+            class="toggle-password"
+            type="button"
+            aria-label="Mostrar contraseña"
+            title="Mostrar contraseña">
+            <svg id="eyeIcon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+              <circle cx="12" cy="12" r="3"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <button id="btnSubmit" class="btn-primary" type="submit">
+        <span>Ingresar al Sistema</span>
+      </button>
+    </form>
+
+    <footer class="login-footer">
+      <span>ASISTECH v1.0 &middot; Acceso Protegido</span>
+    </footer>
+  </main>
+
+  <script>
+    (() => {
+      'use strict';
+
+      // 1. Si ya tiene sesión activa previa, redirigir directo al panel
+      try {
+        const sesion = localStorage.getItem('asistech_user');
+        if (sesion) {
+          window.location.replace('/Panel_de_asistencia.html');
+          return;
+        }
+      } catch (e) {}
+
+      const form = document.getElementById('loginForm');
+      const txtUsuario = document.getElementById('txtUsuario');
+      const txtContrasena = document.getElementById('txtContrasena');
+      const btnSubmit = document.getElementById('btnSubmit');
+      const btnTogglePwd = document.getElementById('btnTogglePwd');
+      const loginCard = document.getElementById('loginCard');
+      const loginError = document.getElementById('loginError');
+      const errorText = document.getElementById('errorText');
+
+      // Alternar visualización de contraseña
+      btnTogglePwd.addEventListener('click', () => {
+        const esPassword = txtContrasena.type === 'password';
+        txtContrasena.type = esPassword ? 'text' : 'password';
+        btnTogglePwd.setAttribute('aria-label', esPassword ? 'Ocultar contraseña' : 'Mostrar contraseña');
+      });
+
+      function mostrarError(mensaje) {
+        errorText.textContent = mensaje || 'Credenciales incorrectas.';
+        loginError.classList.add('show');
+        loginCard.classList.remove('shake');
+        void loginCard.offsetWidth; // Forzar reflujo para reiniciar animación
+        loginCard.classList.add('shake');
+      }
+
+      function ocultarError() {
+        loginError.classList.remove('show');
+      }
+
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        ocultarError();
+
+        const usuario = txtUsuario.value.trim();
+        const contrasena = txtContrasena.value;
+
+        if (!usuario || !contrasena) {
+          mostrarError('Por favor ingresa usuario y contraseña.');
+          return;
+        }
+
+        btnSubmit.disabled = true;
+        btnSubmit.innerHTML = '<span>Verificando credenciales...</span>';
+
+        try {
+          const res = await fetch('/api/login', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json'
+            },
+            body: JSON.stringify({ usuario, contrasena })
+          });
+
+          const data = await res.json();
+
+          if (!res.ok) {
+            mostrarError(data.detail || 'Usuario o contraseña incorrectos.');
+            btnSubmit.disabled = false;
+            btnSubmit.innerHTML = '<span>Ingresar al Sistema</span>';
+            txtContrasena.focus();
+            return;
+          }
+
+          // Guardar información del usuario autenticado en el navegador
+          localStorage.setItem('asistech_user', JSON.stringify({
+            id_usuario: data.usuario.id_usuario,
+            nombre: data.usuario.nombre,
+            apellido: data.usuario.apellido,
+            usuario: data.usuario.usuario,
+            login_time: new Date().toISOString()
+          }));
+
+          btnSubmit.innerHTML = '<span>¡Acceso concedido! Entrando...</span>';
+          btnSubmit.style.background = 'var(--ok)';
+
+          setTimeout(() => {
+            window.location.replace('/Panel_de_asistencia.html');
+          }, 350);
+
+        } catch (err) {
+          console.error(err);
+          mostrarError('No se pudo conectar con el servidor. Verifica tu conexión.');
+          btnSubmit.disabled = false;
+          btnSubmit.innerHTML = '<span>Ingresar al Sistema</span>';
+        }
+      });
+    })();
+  </script>
+</body>
+
+</html>

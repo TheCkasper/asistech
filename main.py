@@ -38,20 +38,80 @@ if (BASE_DIR / "js").exists():
     app.mount("/js", StaticFiles(directory=str(BASE_DIR / "js")), name="js")
 
 
+import bcrypt
+
 @app.get("/")
-def inicio():
-    """Sirve la interfaz web del Panel de Asistencia."""
-    archivo_html = BASE_DIR / "Panel_de_asistencia.html"
+@app.get("/login")
+def login_page():
+    """Sirve la pantalla de inicio de sesión."""
+    archivo_html = BASE_DIR / "login.html"
     if archivo_html.exists():
         return FileResponse(str(archivo_html), media_type="text/html; charset=utf-8")
-    return {"mensaje": "ASISTECH API activa"}
+    return {"mensaje": "ASISTECH API activa - Login"}
 
 
 @app.get("/panel")
 @app.get("/Panel_de_asistencia.html")
 def panel():
+    """Sirve el Panel de Asistencia."""
     archivo_html = BASE_DIR / "Panel_de_asistencia.html"
-    return FileResponse(str(archivo_html), media_type="text/html; charset=utf-8")
+    if archivo_html.exists():
+        return FileResponse(str(archivo_html), media_type="text/html; charset=utf-8")
+    return {"mensaje": "Panel de asistencia no encontrado"}
+
+
+class LoginRequest(BaseModel):
+    usuario: str = Field(min_length=1, max_length=100)
+    contrasena: str = Field(min_length=1)
+
+
+def verificar_contrasena(contrasena_plana: str, hash_almacenado: str) -> bool:
+    try:
+        if not hash_almacenado:
+            return False
+        if hash_almacenado.startswith(("$2b$", "$2a$", "$2y$")):
+            return bcrypt.checkpw(contrasena_plana.encode("utf-8"), hash_almacenado.encode("utf-8"))
+        return contrasena_plana == hash_almacenado
+    except Exception:
+        return False
+
+
+@app.post("/api/login")
+def autenticar_usuario(datos: LoginRequest):
+    """Autentica las credenciales del usuario contra la base de datos MariaDB."""
+    try:
+        with engine.connect() as conn:
+            row = conn.execute(
+                text(
+                    "SELECT id_usuario, nombre, apellido, usuario, contrasena, estado "
+                    "FROM usuario WHERE usuario = :u LIMIT 1"
+                ),
+                {"u": datos.usuario.strip()},
+            ).mappings().first()
+
+            if not row:
+                raise HTTPException(status_code=401, detail="Usuario o contraseña incorrectos.")
+
+            if row["estado"] != 1:
+                raise HTTPException(status_code=403, detail="Tu usuario se encuentra inactivo. Contacta al administrador.")
+
+            if not verificar_contrasena(datos.contrasena, row["contrasena"]):
+                raise HTTPException(status_code=401, detail="Usuario o contraseña incorrectos.")
+
+            return {
+                "estado": "ok",
+                "mensaje": "Inicio de sesión correcto",
+                "usuario": {
+                    "id_usuario": row["id_usuario"],
+                    "nombre": row["nombre"],
+                    "apellido": row["apellido"],
+                    "usuario": row["usuario"],
+                },
+            }
+    except HTTPException:
+        raise
+    except SQLAlchemyError as err:
+        raise HTTPException(status_code=500, detail="Error al conectar con la base de datos.")
 
 
 class Marcaje(BaseModel):

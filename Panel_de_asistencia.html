@@ -15,6 +15,16 @@
 
   <!-- Estilos CSS -->
   <link rel="stylesheet" href="css/styles.css">
+
+  <!-- Verificación de autenticación: si no hay sesión, redirige al login -->
+  <script>
+    try {
+      const sesion = localStorage.getItem('asistech_user');
+      if (!sesion) {
+        window.location.replace('/');
+      }
+    } catch (e) {}
+  </script>
 </head>
 
 <body>
@@ -27,10 +37,16 @@
         <h1>ASISTECH</h1>
         <p id="subtitle"></p>
       </div>
-      <span id="conn" class="chip" role="status">
-        <span class="dot" aria-hidden="true"></span>
-        <span id="connText"></span>
-      </span>
+      <div class="top-actions">
+        <span id="conn" class="chip" role="status">
+          <span class="dot" aria-hidden="true"></span>
+          <span id="connText"></span>
+        </span>
+        <span id="userChip" class="chip user-chip" style="display:none;" title="Usuario activo">
+          <span id="userName"></span>
+        </span>
+        <button id="btnLogout" class="btn-logout" type="button" title="Cerrar sesión">Cerrar sesión</button>
+      </div>
     </header>
 
     <!-- ======================================================================

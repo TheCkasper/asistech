@@ -129,7 +129,53 @@ CREATE TABLE IF NOT EXISTS alerta_ia (
 );
 
 -- ---------------------------------------------------------------------
--- 4. Vistas
+-- 4. Usuarios del sistema (Acceso y Seguridad al Dashboard)
+--
+-- usuario: identificador único para iniciar sesión.
+-- contrasena: contraseña del usuario para autenticación.
+-- confirmar_contrasena: confirmación de contraseña.
+-- estado: 1 = activo (puede iniciar sesión), 0 = inactivo (bloqueado).
+-- creado_en / actualizado_en: control de auditoría de registros.
+-- ---------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS usuario (
+    id_usuario INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    nombre VARCHAR(60) NOT NULL,
+    apellido VARCHAR(60) NOT NULL,
+    usuario VARCHAR(50) NOT NULL,
+    contrasena VARCHAR(255) NOT NULL,
+    confirmar_contrasena VARCHAR(255) NOT NULL,
+    estado TINYINT(1) NOT NULL DEFAULT 1 COMMENT '1 = Activo, 0 = Inactivo',
+    creado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    actualizado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+    CONSTRAINT uq_usuario_login UNIQUE (usuario),
+    INDEX idx_usuario_estado (usuario, estado)
+);
+
+-- Agregar usuario de prueba para login
+-- Usuario: admin
+-- Contraseña: Demo#2026
+INSERT INTO usuario (
+    nombre,
+    apellido,
+    usuario,
+    contrasena,
+    confirmar_contrasena,
+    estado
+)
+VALUES (
+    'Emanuel',
+    'Baltazar',
+    'admin',
+    '$2b$12$nlKl7SW1xFXLDyObc1Qgy.P/VbBauOdjqhZAc6.RPcxjr/pf0A7za',
+    '$2b$12$nlKl7SW1xFXLDyObc1Qgy.P/VbBauOdjqhZAc6.RPcxjr/pf0A7za',
+    1
+);
+
+
+-- ---------------------------------------------------------------------
+-- 5. Vistas
 --
 -- Guatemala utiliza UTC-6.
 -- El día local comienza a las 06:00 UTC.
