@@ -17,10 +17,19 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        // URL base por defecto (Local)
+        buildConfigField("String", "API_ASISTENCIA_URL", "\"http://10.0.2.2:8000/api/asistencia\"")
     }
 
     buildTypes {
+        debug {
+            // URL para pruebas locales en emulador o servidor local
+            buildConfigField("String", "API_ASISTENCIA_URL", "\"http://10.0.2.2:8000/api/asistencia\"")
+        }
         release {
+            // URL de producción en BanaHosting / Cloudflare
+            buildConfigField("String", "API_ASISTENCIA_URL", "\"https://asistech.divinevo.com/api/asistencia\"")
             optimization {
                 enable = true
                 packageScope = setOf("androidx.**", "kotlin.**", "kotlinx.**")
@@ -33,6 +42,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 

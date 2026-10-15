@@ -29,8 +29,7 @@ import java.net.URL
 import java.time.OffsetDateTime
 import java.util.UUID
 
-private const val API_ASISTENCIA =
-    "http://127.0.0.1:8000/api/asistencia"
+private val API_ASISTENCIA = BuildConfig.API_ASISTENCIA_URL
 
 class MainActivity : ComponentActivity() {
 
