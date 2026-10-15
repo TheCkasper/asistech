@@ -1,8 +1,17 @@
 import os
 import sys
 
-# Asegurar que el directorio raíz del proyecto esté en el path de Python
-sys.path.insert(0, os.path.dirname(__file__))
+# Directorio raíz del proyecto
+PROJECT_ROOT = os.path.dirname(__file__)
+sys.path.insert(0, PROJECT_ROOT)
+
+# Detección automática del entorno virtual de cPanel (~/virtualenv/...)
+VENV_BASE = os.path.expanduser('~/virtualenv/' + os.path.basename(PROJECT_ROOT))
+if os.path.exists(VENV_BASE):
+    for root, dirs, files in os.walk(VENV_BASE):
+        if root.endswith('site-packages'):
+            if root not in sys.path:
+                sys.path.insert(0, root)
 
 try:
     from a2wsgi import ASGIMiddleware
@@ -15,7 +24,6 @@ except Exception as e:
     import traceback
     error_detalle = traceback.format_exc()
 
-    # En caso de error de arranque, muestra el traceback de Python directamente en el navegador
     def application(environ, start_response):
         status = '500 Internal Server Error'
         html = f"""
