@@ -1,31 +1,15 @@
 """
-ASISTECH - Endpoints de consulta para el dashboard (propuesta de Marcos para Emanuel).
-
-Cómo integrarlo en el proyecto:
-  1. Guardar este archivo como dashboard_api.py, junto a main.py y database.py.
-  2. En main.py, después de crear `app`:
-         from dashboard_api import router as dashboard_router
-         app.include_router(dashboard_router)
-  3. Habilitar CORS en main.py con el origen real del dashboard
-     (ver la sección 11 del README). Si el dashboard se sirve con
-     `python -m http.server 5173`, el origen es http://localhost:5173
-     y el método GET y PATCH deben estar permitidos:
-         allow_methods=["GET", "POST", "PATCH"]
-  4. Ejecutar antes asistenciadb_marcos.sql (crea las tablas y vistas que usa este código)
-     y poner DB_NAME=AsistenciaDB en el .env (respetando mayúsculas y minúsculas).
-
-Supuesto no verificado: que database.py exporta `engine` (SQLAlchemy). Si el nombre
-o la forma de importarlo es distinta, ajustar solo la línea de import.
+ASISTECH - Endpoints de consulta para el dashboard y gestión de estudiantes.
 """
 
 from datetime import timezone
-from typing import Literal
+from typing import Literal, Optional
 
 from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import text
 
-from database import engine  # ajustar si el engine se importa distinto
+from database import engine
 
 router = APIRouter()
 
@@ -74,7 +58,6 @@ def dashboard(id_establecimiento: int = Query(1, gt=0)):
                 {"e": id_establecimiento},
             ).mappings().all()
     except Exception as err:
-        # Registrar detalle del error en consola para depuración
         print(f"[Error en /api/dashboard] {err}")
         raise HTTPException(status_code=503, detail="No se pudo consultar el dashboard.")
 
@@ -107,12 +90,12 @@ def dashboard(id_establecimiento: int = Query(1, gt=0)):
 
 
 class AlertaRevisada(BaseModel):
-    revisada: Literal[True]  # solo se permite marcar como revisada
+    revisada: Literal[True]
 
 
 @router.patch("/api/alertas/{id_alerta}")
 def marcar_alerta_revisada(id_alerta: int, cuerpo: AlertaRevisada):
-    """Marca una alerta de la IA como revisada. Es idempotente: repetirla no da error."""
+    """Marca una alerta de la IA como revisada."""
     try:
         with engine.begin() as conn:
             existe = conn.execute(
@@ -134,3 +117,316 @@ def marcar_alerta_revisada(id_alerta: int, cuerpo: AlertaRevisada):
         raise HTTPException(status_code=503, detail="No se pudo actualizar la alerta.")
 
     return {"estado": "revisada", "id_alerta": id_alerta}
+
+
+# =====================================================================
+# ENDPOINTS DE GESTIÓN DE ESTUDIANTES (CRUD Y REGISTRO DE ASISTENCIAS)
+# =====================================================================
+
+@router.get("/api/estudiantes")
+def listar_estudiantes(
+    id_establecimiento: int = Query(1, gt=0),
+    buscar: Optional[str] = None
+):
+    """Obtiene el listado de estudiantes ligados a un establecimiento."""
+    try:
+        with engine.connect() as conn:
+            sql = """
+                SELECT e.id_estudiante, e.uid_nfc, e.nombre, e.grado, e.seccion,
+                       e.id_establecimiento, e.activo, e.creado_en,
+                       e.id_ciclo_escolar, e.id_grado, e.id_seccion, e.id_grado_seccion,
+                       c.nombre AS ciclo_nombre
+                FROM estudiante e
+                LEFT JOIN ciclo_escolar c ON c.id_ciclo_escolar = e.id_ciclo_escolar
+                WHERE e.id_establecimiento = :e
+            """
+            params = {"e": id_establecimiento}
+
+            if buscar and buscar.strip():
+                sql += " AND (LOWER(e.nombre) LIKE :b OR LOWER(e.uid_nfc) LIKE :b OR LOWER(CONCAT_WS(' ', e.grado, e.seccion)) LIKE :b)"
+                params["b"] = f"%{buscar.strip().lower()}%"
+
+            sql += " ORDER BY e.activo DESC, e.nombre ASC"
+
+            filas = conn.execute(text(sql), params).mappings().all()
+
+            return [
+                {
+                    "id_estudiante": f["id_estudiante"],
+                    "uid_nfc": f["uid_nfc"],
+                    "nombre": f["nombre"],
+                    "grado": f["grado"] or "",
+                    "seccion": f["seccion"] or "",
+                    "id_establecimiento": f["id_establecimiento"],
+                    "activo": bool(f["activo"]),
+                    "creado_en": _a_iso_utc(f["creado_en"]),
+                    "id_ciclo_escolar": f["id_ciclo_escolar"],
+                    "id_grado": f["id_grado"],
+                    "id_seccion": f["id_seccion"],
+                    "id_grado_seccion": f["id_grado_seccion"],
+                    "ciclo_nombre": f["ciclo_nombre"] or "2026",
+                }
+                for f in filas
+            ]
+    except Exception as err:
+        print(f"[Error en /api/estudiantes] {err}")
+        raise HTTPException(status_code=500, detail="Error al consultar estudiantes.")
+
+
+class EstudianteCrear(BaseModel):
+    uid_nfc: str = Field(..., min_length=1, max_length=100)
+    nombre: str = Field(..., min_length=1, max_length=120)
+    grado: Optional[str] = None
+    seccion: Optional[str] = None
+    id_establecimiento: int = Field(1, gt=0)
+    activo: int = Field(1, ge=0, le=1)
+    id_ciclo_escolar: Optional[int] = None
+    id_grado: Optional[int] = None
+    id_seccion: Optional[int] = None
+    id_grado_seccion: Optional[int] = None
+
+
+@router.post("/api/estudiantes")
+def crear_estudiante(datos: EstudianteCrear):
+    """Crea un nuevo estudiante en la base de datos."""
+    uid_limpio = datos.uid_nfc.strip().upper()
+    nombre_limpio = datos.nombre.strip()
+
+    try:
+        with engine.begin() as conn:
+            # Verificar si el UID ya está asignado
+            existente = conn.execute(
+                text("SELECT id_estudiante FROM estudiante WHERE uid_nfc = :uid LIMIT 1"),
+                {"uid": uid_limpio}
+            ).first()
+
+            if existente:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"La tarjeta NFC ({uid_limpio}) ya está asignada a otro estudiante."
+                )
+
+            res = conn.execute(
+                text("""
+                    INSERT INTO estudiante (
+                        uid_nfc, nombre, grado, seccion,
+                        id_establecimiento, activo,
+                        id_ciclo_escolar, id_grado, id_seccion, id_grado_seccion
+                    )
+                    VALUES (
+                        :uid_nfc, :nombre, :grado, :seccion,
+                        :id_establecimiento, :activo,
+                        :id_ciclo_escolar, :id_grado, :id_seccion, :id_grado_seccion
+                    )
+                """),
+                {
+                    "uid_nfc": uid_limpio,
+                    "nombre": nombre_limpio,
+                    "grado": datos.grado.strip() if datos.grado else None,
+                    "seccion": datos.seccion.strip() if datos.seccion else None,
+                    "id_establecimiento": datos.id_establecimiento,
+                    "activo": datos.activo,
+                    "id_ciclo_escolar": datos.id_ciclo_escolar,
+                    "id_grado": datos.id_grado,
+                    "id_seccion": datos.id_seccion,
+                    "id_grado_seccion": datos.id_grado_seccion,
+                }
+            )
+            nuevo_id = res.lastrowid
+
+            return {
+                "estado": "ok",
+                "mensaje": "Estudiante registrado exitosamente.",
+                "id_estudiante": nuevo_id
+            }
+    except HTTPException:
+        raise
+    except Exception as err:
+        print(f"[Error en POST /api/estudiantes] {err}")
+        raise HTTPException(status_code=500, detail="No se pudo registrar el estudiante.")
+
+
+class EstudianteActualizar(BaseModel):
+    uid_nfc: str = Field(..., min_length=1, max_length=100)
+    nombre: str = Field(..., min_length=1, max_length=120)
+    grado: Optional[str] = None
+    seccion: Optional[str] = None
+    activo: int = Field(..., ge=0, le=1)
+    id_ciclo_escolar: Optional[int] = None
+    id_grado: Optional[int] = None
+    id_seccion: Optional[int] = None
+    id_grado_seccion: Optional[int] = None
+
+
+@router.put("/api/estudiantes/{id_estudiante}")
+def actualizar_estudiante(id_estudiante: int, datos: EstudianteActualizar):
+    """Modifica la información o estado (Activo/Inactivo) de un estudiante existente."""
+    uid_limpio = datos.uid_nfc.strip().upper()
+    nombre_limpio = datos.nombre.strip()
+
+    try:
+        with engine.begin() as conn:
+            # Verificar existencia del estudiante
+            est = conn.execute(
+                text("SELECT id_estudiante FROM estudiante WHERE id_estudiante = :id LIMIT 1"),
+                {"id": id_estudiante}
+            ).first()
+
+            if not est:
+                raise HTTPException(status_code=404, detail="Estudiante no encontrado.")
+
+            # Verificar duplicidad de UID con otros estudiantes
+            otro = conn.execute(
+                text("SELECT id_estudiante FROM estudiante WHERE uid_nfc = :uid AND id_estudiante != :id LIMIT 1"),
+                {"uid": uid_limpio, "id": id_estudiante}
+            ).first()
+
+            if otro:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"La tarjeta NFC ({uid_limpio}) ya está asignada a otro estudiante."
+                )
+
+            conn.execute(
+                text("""
+                    UPDATE estudiante
+                    SET uid_nfc = :uid_nfc,
+                        nombre = :nombre,
+                        grado = :grado,
+                        seccion = :seccion,
+                        activo = :activo,
+                        id_ciclo_escolar = :id_ciclo_escolar,
+                        id_grado = :id_grado,
+                        id_seccion = :id_seccion,
+                        id_grado_seccion = :id_grado_seccion
+                    WHERE id_estudiante = :id
+                """),
+                {
+                    "id": id_estudiante,
+                    "uid_nfc": uid_limpio,
+                    "nombre": nombre_limpio,
+                    "grado": datos.grado.strip() if datos.grado else None,
+                    "seccion": datos.seccion.strip() if datos.seccion else None,
+                    "activo": datos.activo,
+                    "id_ciclo_escolar": datos.id_ciclo_escolar,
+                    "id_grado": datos.id_grado,
+                    "id_seccion": datos.id_seccion,
+                    "id_grado_seccion": datos.id_grado_seccion,
+                }
+            )
+
+            return {
+                "estado": "ok",
+                "mensaje": "Información del estudiante actualizada correctamente.",
+                "id_estudiante": id_estudiante
+            }
+    except HTTPException:
+        raise
+    except Exception as err:
+        print(f"[Error en PUT /api/estudiantes/{id_estudiante}] {err}")
+        raise HTTPException(status_code=500, detail="No se pudo actualizar la información del estudiante.")
+
+
+@router.get("/api/estudiantes/{id_estudiante}/asistencias")
+def obtener_asistencias_estudiante(
+    id_estudiante: int,
+    periodo: Literal["semana", "mes", "ciclo"] = Query("semana")
+):
+    """Obtiene el historial de asistencias de un estudiante para el período seleccionado (semana, mes o ciclo)."""
+    try:
+        with engine.connect() as conn:
+            est = conn.execute(
+                text("""
+                    SELECT id_estudiante, uid_nfc, nombre, grado, seccion, id_establecimiento
+                    FROM estudiante
+                    WHERE id_estudiante = :id LIMIT 1
+                """),
+                {"id": id_estudiante}
+            ).mappings().first()
+
+            if not est:
+                raise HTTPException(status_code=404, detail="Estudiante no encontrado.")
+
+            # Definir ventana de días según el período
+            dias = 7 if periodo == "semana" else 30 if periodo == "mes" else 365
+
+            logs = conn.execute(
+                text("""
+                    SELECT id_registro, id_evento, uid_nfc, id_establecimiento,
+                           fecha_hora, tipo_registro, recibido_en
+                    FROM asistencia_nfc
+                    WHERE uid_nfc = :uid AND id_establecimiento = :e
+                      AND fecha_hora >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL :dias DAY)
+                    ORDER BY fecha_hora DESC
+                """),
+                {"uid": est["uid_nfc"], "e": est["id_establecimiento"], "dias": dias}
+            ).mappings().all()
+
+            return {
+                "estudiante": {
+                    "id_estudiante": est["id_estudiante"],
+                    "uid_nfc": est["uid_nfc"],
+                    "nombre": est["nombre"],
+                    "grado": est["grado"] or "",
+                    "seccion": est["seccion"] or "",
+                },
+                "periodo": periodo,
+                "total_registros": len(logs),
+                "asistencias": [
+                    {
+                        "id_registro": l["id_registro"],
+                        "tipo_registro": l["tipo_registro"],
+                        "fecha_hora": _a_iso_utc(l["fecha_hora"]),
+                    }
+                    for l in logs
+                ]
+            }
+    except HTTPException:
+        raise
+    except Exception as err:
+        print(f"[Error en /api/estudiantes/{id_estudiante}/asistencias] {err}")
+        raise HTTPException(status_code=500, detail="No se pudieron consultar las asistencias del estudiante.")
+
+
+@router.get("/api/opciones_academicas")
+def obtener_opciones_academicas(id_establecimiento: int = Query(1, gt=0)):
+    """Devuelve los ciclos escolares, grados y secciones configurados."""
+    try:
+        with engine.connect() as conn:
+            ciclos = conn.execute(
+                text("SELECT id_ciclo_escolar, anio, nombre FROM ciclo_escolar WHERE id_establecimiento = :e ORDER BY anio DESC"),
+                {"e": id_establecimiento}
+            ).mappings().all()
+
+            grados = conn.execute(
+                text("SELECT id_grado, nombre FROM grado WHERE id_establecimiento = :e AND activo = 1 ORDER BY id_grado ASC"),
+                {"e": id_establecimiento}
+            ).mappings().all()
+
+            secciones = conn.execute(
+                text("SELECT id_seccion, nombre FROM seccion WHERE id_establecimiento = :e AND activo = 1 ORDER BY id_seccion ASC"),
+                {"e": id_establecimiento}
+            ).mappings().all()
+
+            gs = conn.execute(
+                text("""
+                    SELECT gs.id_grado_seccion, gs.id_ciclo_escolar, gs.id_grado, gs.id_seccion,
+                           g.nombre AS grado_nombre, s.nombre AS seccion_nombre
+                    FROM grado_seccion gs
+                    JOIN grado g ON g.id_grado = gs.id_grado
+                    JOIN seccion s ON s.id_seccion = gs.id_seccion
+                    JOIN ciclo_escolar c ON c.id_ciclo_escolar = gs.id_ciclo_escolar
+                    WHERE c.id_establecimiento = :e
+                """),
+                {"e": id_establecimiento}
+            ).mappings().all()
+
+            return {
+                "ciclos": [dict(c) for c in ciclos],
+                "grados": [dict(g) for g in grados],
+                "secciones": [dict(s) for s in secciones],
+                "grados_secciones": [dict(x) for x in gs]
+            }
+    except Exception as err:
+        print(f"[Error en /api/opciones_academicas] {err}")
+        return {"ciclos": [], "grados": [], "secciones": [], "grados_secciones": []}

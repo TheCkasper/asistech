@@ -20,6 +20,7 @@
 --   6. Consultas de verificación
 --   7. Accesos opcionales
 --   8. Limpieza opcional de estudiantes de prueba
+--   9. Gestión académica y roles (establecimiento, rol, ciclo_escolar, grado, seccion, grado_seccion y alter tables)
 --
 -- IMPORTANTE:
 -- Usar siempre el nombre "asistech" en este script, en DB_NAME del .env
@@ -156,7 +157,7 @@ CREATE TABLE IF NOT EXISTS usuario (
 -- Agregar usuario de prueba para login
 -- Usuario: admin
 -- Contraseña: Demo#2026
-INSERT INTO usuario (
+INSERT IGNORE INTO usuario (
     nombre,
     apellido,
     usuario,
@@ -369,3 +370,238 @@ ORDER BY creada_en DESC;
 
 -- DELETE FROM asistech.estudiante
 -- WHERE nombre LIKE 'Estudiante de prueba%';
+
+-- ---------------------------------------------------------------------
+-- 9. Gestión Académica y Roles (Administrador, Ciclo Escolar, Grado, Sección y Estudiante)
+--
+-- Añade la estructura para el mantenimiento/CRUD de roles y de la estructura
+-- académica organizativa:
+--   - Rol: Permite definir roles como "Administrador" para el control de accesos.
+--   - Establecimiento: Un establecimiento agrupa ciclos, grados, secciones y estudiantes.
+--   - Ciclo Escolar: Creado por un Administrador para un establecimiento.
+--   - Grado y Sección: Grados y secciones asociadas a un establecimiento.
+--   - Grado_Seccion: Enlace/asignación de un grado con una sección dentro de un ciclo escolar.
+--   - Alteraciones a usuario y estudiante para enlazar estas entidades.
+-- ---------------------------------------------------------------------
+
+-- 9.1. Tabla de Establecimientos
+CREATE TABLE IF NOT EXISTS establecimiento (
+    id_establecimiento INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    nombre VARCHAR(120) NOT NULL,
+    codigo VARCHAR(50) NULL,
+    direccion VARCHAR(255) NULL,
+    telefono VARCHAR(20) NULL,
+    activo TINYINT(1) NOT NULL DEFAULT 1,
+    creado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT uq_establecimiento_nombre UNIQUE (nombre)
+);
+
+-- Insertar establecimiento principal por defecto (ID 1 para mantener compatibilidad)
+INSERT IGNORE INTO establecimiento (id_establecimiento, nombre)
+VALUES (1, 'Establecimiento Principal');
+
+
+-- 9.2. Tabla de Roles (CRUD de Roles)
+CREATE TABLE IF NOT EXISTS rol (
+    id_rol INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    nombre VARCHAR(50) NOT NULL,
+    descripcion VARCHAR(255) NULL,
+    creado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT uq_rol_nombre UNIQUE (nombre)
+);
+
+-- Insertar rol Administrador por defecto
+INSERT IGNORE INTO rol (id_rol, nombre, descripcion)
+VALUES (1, 'Administrador', 'Rol de administración del sistema para gestionar Ciclos Escolares, Grados, Secciones y Estudiantes');
+
+
+-- 9.3. Tabla de Ciclos Escolares
+CREATE TABLE IF NOT EXISTS ciclo_escolar (
+    id_ciclo_escolar INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    id_establecimiento INT UNSIGNED NOT NULL,
+    anio INT UNSIGNED NOT NULL,
+    nombre VARCHAR(60) NOT NULL COMMENT 'Ejemplo: Ciclo Escolar 2026',
+    fecha_inicio DATE NULL,
+    fecha_fin DATE NULL,
+    estado ENUM('activo', 'inactivo', 'cerrado') NOT NULL DEFAULT 'activo',
+    creado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_ciclo_establecimiento
+        FOREIGN KEY (id_establecimiento)
+        REFERENCES establecimiento (id_establecimiento)
+        ON DELETE CASCADE,
+
+    CONSTRAINT uq_ciclo_estab_anio UNIQUE (id_establecimiento, anio)
+);
+
+-- Insertar ciclo escolar por defecto
+INSERT IGNORE INTO ciclo_escolar (id_ciclo_escolar, id_establecimiento, anio, nombre, estado)
+VALUES (1, 1, 2026, 'Ciclo Escolar 2026', 'activo');
+
+
+-- 9.4. Tabla de Grados
+CREATE TABLE IF NOT EXISTS grado (
+    id_grado INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    id_establecimiento INT UNSIGNED NOT NULL,
+    nombre VARCHAR(60) NOT NULL COMMENT 'Ejemplo: 1ro Básico, 2do Básico',
+    descripcion VARCHAR(150) NULL,
+    activo TINYINT(1) NOT NULL DEFAULT 1,
+    creado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_grado_establecimiento
+        FOREIGN KEY (id_establecimiento)
+        REFERENCES establecimiento (id_establecimiento)
+        ON DELETE CASCADE,
+
+    CONSTRAINT uq_grado_estab_nombre UNIQUE (id_establecimiento, nombre)
+);
+
+-- Insertar grados de ejemplo
+INSERT IGNORE INTO grado (id_grado, id_establecimiento, nombre)
+VALUES
+    (1, 1, '1ro Básico'),
+    (2, 1, '2do Básico');
+
+
+-- 9.5. Tabla de Secciones
+CREATE TABLE IF NOT EXISTS seccion (
+    id_seccion INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    id_establecimiento INT UNSIGNED NOT NULL,
+    nombre VARCHAR(10) NOT NULL COMMENT 'Ejemplo: A, B, C',
+    descripcion VARCHAR(150) NULL,
+    activo TINYINT(1) NOT NULL DEFAULT 1,
+    creado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_seccion_establecimiento
+        FOREIGN KEY (id_establecimiento)
+        REFERENCES establecimiento (id_establecimiento)
+        ON DELETE CASCADE,
+
+    CONSTRAINT uq_seccion_estab_nombre UNIQUE (id_establecimiento, nombre)
+);
+
+-- Insertar secciones de ejemplo
+INSERT IGNORE INTO seccion (id_seccion, id_establecimiento, nombre)
+VALUES
+    (1, 1, 'A'),
+    (2, 1, 'B');
+
+
+-- 9.6. Tabla Enlace Grado - Sección por Ciclo Escolar
+CREATE TABLE IF NOT EXISTS grado_seccion (
+    id_grado_seccion INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    id_ciclo_escolar INT UNSIGNED NOT NULL,
+    id_grado INT UNSIGNED NOT NULL,
+    id_seccion INT UNSIGNED NOT NULL,
+    capacidad INT UNSIGNED NULL DEFAULT 35,
+    creado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_gs_ciclo
+        FOREIGN KEY (id_ciclo_escolar)
+        REFERENCES ciclo_escolar (id_ciclo_escolar)
+        ON DELETE CASCADE,
+
+    CONSTRAINT fk_gs_grado
+        FOREIGN KEY (id_grado)
+        REFERENCES grado (id_grado)
+        ON DELETE CASCADE,
+
+    CONSTRAINT fk_gs_seccion
+        FOREIGN KEY (id_seccion)
+        REFERENCES seccion (id_seccion)
+        ON DELETE CASCADE,
+
+    CONSTRAINT uq_grado_seccion_ciclo UNIQUE (id_ciclo_escolar, id_grado, id_seccion)
+);
+
+-- Insertar combinaciones grado-seccion para el ciclo escolar 2026
+INSERT IGNORE INTO grado_seccion (id_grado_seccion, id_ciclo_escolar, id_grado, id_seccion)
+VALUES
+    (1, 1, 1, 1), -- 1ro Básico - Sección A
+    (2, 1, 1, 2), -- 1ro Básico - Sección B
+    (3, 1, 2, 2); -- 2do Básico - Sección B
+
+
+-- 9.7. Alteración idempotente de la tabla usuario (Asignación de Rol)
+DELIMITER //
+CREATE PROCEDURE sp_alter_usuario_roles()
+BEGIN
+    IF NOT EXISTS (
+        SELECT * FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'usuario'
+          AND COLUMN_NAME = 'id_rol'
+    ) THEN
+        ALTER TABLE usuario
+            ADD COLUMN id_rol INT UNSIGNED NULL AFTER id_usuario,
+            ADD CONSTRAINT fk_usuario_rol
+                FOREIGN KEY (id_rol)
+                REFERENCES rol (id_rol)
+                ON DELETE SET NULL;
+    END IF;
+END //
+DELIMITER ;
+
+CALL sp_alter_usuario_roles();
+DROP PROCEDURE IF EXISTS sp_alter_usuario_roles;
+
+-- Asignar rol Administrador al usuario 'admin' existente
+UPDATE usuario
+SET id_rol = 1
+WHERE usuario = 'admin' AND id_rol IS NULL;
+
+
+-- 9.8. Alteración idempotente de la tabla estudiante (Relaciones con Ciclo, Grado, Sección y Grado_Seccion)
+DELIMITER //
+CREATE PROCEDURE sp_alter_estudiante_academico()
+BEGIN
+    IF NOT EXISTS (
+        SELECT * FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'estudiante'
+          AND COLUMN_NAME = 'id_ciclo_escolar'
+    ) THEN
+        ALTER TABLE estudiante
+            ADD COLUMN id_ciclo_escolar INT UNSIGNED NULL AFTER id_establecimiento,
+            ADD COLUMN id_grado INT UNSIGNED NULL AFTER id_ciclo_escolar,
+            ADD COLUMN id_seccion INT UNSIGNED NULL AFTER id_grado,
+            ADD COLUMN id_grado_seccion INT UNSIGNED NULL AFTER id_seccion;
+
+        ALTER TABLE estudiante
+            ADD CONSTRAINT fk_estudiante_establecimiento
+                FOREIGN KEY (id_establecimiento)
+                REFERENCES establecimiento (id_establecimiento)
+                ON DELETE CASCADE,
+            ADD CONSTRAINT fk_estudiante_ciclo
+                FOREIGN KEY (id_ciclo_escolar)
+                REFERENCES ciclo_escolar (id_ciclo_escolar)
+                ON DELETE SET NULL,
+            ADD CONSTRAINT fk_estudiante_grado
+                FOREIGN KEY (id_grado)
+                REFERENCES grado (id_grado)
+                ON DELETE SET NULL,
+            ADD CONSTRAINT fk_estudiante_seccion
+                FOREIGN KEY (id_seccion)
+                REFERENCES seccion (id_seccion)
+                ON DELETE SET NULL,
+            ADD CONSTRAINT fk_estudiante_grado_seccion
+                FOREIGN KEY (id_grado_seccion)
+                REFERENCES grado_seccion (id_grado_seccion)
+                ON DELETE SET NULL;
+    END IF;
+END //
+DELIMITER ;
+
+CALL sp_alter_estudiante_academico();
+DROP PROCEDURE IF EXISTS sp_alter_estudiante_academico;
+
+-- Enlazar los estudiantes de prueba existentes a la nueva estructura relacional
+UPDATE estudiante
+SET id_ciclo_escolar = 1, id_grado = 1, id_seccion = 1, id_grado_seccion = 1
+WHERE grado = '1ro Básico' AND seccion = 'A' AND id_ciclo_escolar IS NULL;
+
+UPDATE estudiante
+SET id_ciclo_escolar = 1, id_grado = 2, id_seccion = 2, id_grado_seccion = 3
+WHERE grado = '2do Básico' AND seccion = 'B' AND id_ciclo_escolar IS NULL;

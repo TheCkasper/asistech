@@ -60,6 +60,16 @@ def panel():
     return {"mensaje": "Panel de asistencia no encontrado"}
 
 
+@app.get("/estudiantes")
+@app.get("/Estudiantes.html")
+def estudiantes_page():
+    """Sirve la vista de Gestión de Estudiantes."""
+    archivo_html = BASE_DIR / "Estudiantes.html"
+    if archivo_html.exists():
+        return HTMLResponse(content=archivo_html.read_text(encoding="utf-8"))
+    return {"mensaje": "Vista de estudiantes no encontrada"}
+
+
 class LoginRequest(BaseModel):
     usuario: str = Field(min_length=1, max_length=100)
     contrasena: str = Field(min_length=1)

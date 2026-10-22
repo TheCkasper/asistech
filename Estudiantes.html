@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Estudiantes · ASISTECH</title>
+
+  <!-- Fuentes tipográficas -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600&family=Unbounded:wght@500;600&display=swap"
+    rel="stylesheet">
+
+  <!-- Estilos CSS -->
+  <link rel="stylesheet" href="css/styles.css">
+
+  <!-- Verificación de autenticación -->
+  <script>
+    try {
+      const sesion = localStorage.getItem('asistech_user');
+      if (!sesion) {
+        window.location.replace('/');
+      }
+    } catch (e) {}
+  </script>
+</head>
+
+<body>
+  <div class="wrap">
+    <!-- ======================================================================
+         1. CABECERA: Título, Navegación y Usuario
+         ====================================================================== -->
+    <header class="top">
+      <div class="brand">
+        <h1>ASISTECH</h1>
+        <p>Gestión de Estudiantes &middot; Control de Asistencia</p>
+      </div>
+      <div class="top-actions">
+        <a href="/Panel_de_asistencia.html" class="btn-nav-action" title="Volver al panel principal">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -2px; margin-right: 4px;">
+            <line x1="19" y1="12" x2="5" y2="12"></line>
+            <polyline points="12 19 5 12 12 5"></polyline>
+          </svg>
+          <span>Panel Principal</span>
+        </a>
+
+        <button id="btnNuevoEstudiante" class="btn-primary-sm" type="button">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+          </svg>
+          <span>Nuevo Estudiante</span>
+        </button>
+
+        <span id="userChip" class="chip user-chip" style="display:none;" title="Usuario activo">
+          <span id="userName"></span>
+        </span>
+        <button id="btnLogout" class="btn-logout" type="button" title="Cerrar sesión">Cerrar sesión</button>
+      </div>
+    </header>
+
+    <!-- ======================================================================
+         2. TARJETAS DE MÉTRICAS / KPIs DE ESTUDIANTES
+         ====================================================================== -->
+    <section class="kpis" aria-label="Métricas de estudiantes">
+      <div class="kpi">
+        <div class="v" id="kTotalEstudiantes">0</div>
+        <div class="l">Total Estudiantes</div>
+        <div class="s">registrados en el establecimiento</div>
+      </div>
+      <div class="kpi">
+        <div class="v" id="kActivos" style="color: var(--ok);">0</div>
+        <div class="l">Estudiantes Activos</div>
+        <div class="s">pueden registrar marcajes NFC</div>
+      </div>
+      <div class="kpi">
+        <div class="v" id="kInactivos" style="color: var(--alta);">0</div>
+        <div class="l">Inactivos</div>
+        <div class="s">acceso deshabilitado</div>
+      </div>
+    </section>
+
+    <!-- ======================================================================
+         3. PANEL PRINCIPAL: TABLA Y FILTROS
+         ====================================================================== -->
+    <section class="panel" aria-labelledby="hEstudiantes">
+      <div class="panel-head">
+        <h2 id="hEstudiantes">Listado de Estudiantes</h2>
+        <div class="filters-row">
+          <div class="search-box">
+            <label for="txtBuscar" class="sr-only">Buscar por nombre, tarjeta NFC o grado</label>
+            <input id="txtBuscar" class="search" type="search" placeholder="Buscar por nombre, tarjeta NFC o grado..." autocomplete="off">
+          </div>
+          <select id="selFiltroEstado" class="form-select-sm" aria-label="Filtrar por estado">
+            <option value="todos">Todos los estados</option>
+            <option value="activos" selected>Solo Activos</option>
+            <option value="inactivos">Solo Inactivos</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Tabla de estudiantes -->
+      <div class="table-responsive">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Estudiante</th>
+              <th>Tarjeta NFC (UID)</th>
+              <th>Grado y Sección</th>
+              <th>Ciclo Escolar</th>
+              <th>Estado</th>
+              <th style="text-align: right;">Acciones</th>
+            </tr>
+          </thead>
+          <tbody id="tblEstudiantes">
+            <tr>
+              <td colspan="6" class="empty">Cargando listado de estudiantes...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <!-- ======================================================================
+       4. MODAL: CREAR / EDITAR ESTUDIANTE
+       ====================================================================== -->
+  <div id="modalEstudiante" class="modal-backdrop" aria-hidden="true">
+    <div class="modal-card" role="dialog" aria-labelledby="lblModalTitulo">
+      <div class="modal-header">
+        <h2 id="lblModalTitulo">Nuevo Estudiante</h2>
+        <button id="btnCerrarModalEst" class="btn-icon" type="button" aria-label="Cerrar modal">&times;</button>
+      </div>
+
+      <div id="msgModalForm" class="msg-box" style="display:none;" role="alert"></div>
+
+      <form id="formEstudiante" class="modal-form">
+        <input type="hidden" id="txtIdEstudiante" value="">
+
+        <div class="form-group">
+          <label for="txtUidNfc">Código Tarjeta NFC (UID) <span class="req">*</span></label>
+          <input id="txtUidNfc" class="form-input" type="text" placeholder="Ej: 04A1B2C3D4" style="text-transform: uppercase;" required>
+          <small class="hint-input">Hexadecimal en mayúsculas sin espacios ni guiones.</small>
+        </div>
+
+        <div class="form-group">
+          <label for="txtNombre">Nombre Completo del Estudiante <span class="req">*</span></label>
+          <input id="txtNombre" class="form-input" type="text" placeholder="Ej: María José Morales" required>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group col-half">
+            <label for="txtGrado">Grado <span class="req">*</span></label>
+            <input id="txtGrado" class="form-input" type="text" placeholder="Ej: 1ro Básico" required list="listGrados">
+            <datalist id="listGrados"></datalist>
+          </div>
+
+          <div class="form-group col-half">
+            <label for="txtSeccion">Sección <span class="req">*</span></label>
+            <input id="txtSeccion" class="form-input" type="text" placeholder="Ej: A" required list="listSecciones">
+            <datalist id="listSecciones"></datalist>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group col-half">
+            <label for="selCicloEscolar">Ciclo Escolar</label>
+            <select id="selCicloEscolar" class="form-input">
+              <!-- Cargado dinámicamente -->
+            </select>
+          </div>
+
+          <div class="form-group col-half">
+            <label for="selEstado">Estado del Estudiante <span class="req">*</span></label>
+            <select id="selEstado" class="form-input" required>
+              <option value="1">1 - Activo (Permite marcajes)</option>
+              <option value="0">0 - Inactivo (Acceso bloqueado)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button id="btnCancelarForm" class="btn-secondary" type="button">Cancelar</button>
+          <button id="btnGuardarForm" class="btn-primary" type="submit">Guardar Estudiante</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ======================================================================
+       5. MODAL / DRAWER: REGISTRO DE ASISTENCIAS DEL ESTUDIANTE
+       ====================================================================== -->
+  <div id="modalAsistencias" class="modal-backdrop" aria-hidden="true">
+    <div class="modal-card modal-lg" role="dialog" aria-labelledby="lblAsistenciaNombre">
+      <div class="modal-header">
+        <div>
+          <h2 id="lblAsistenciaNombre">Historial de Asistencias</h2>
+          <p id="lblAsistenciaMeta" class="hint" style="margin:2px 0 0;"></p>
+        </div>
+        <button id="btnCerrarModalAsis" class="btn-icon" type="button" aria-label="Cerrar modal">&times;</button>
+      </div>
+
+      <!-- Pestañas / Selector de Período -->
+      <div class="period-tabs">
+        <button class="tab-btn active" data-periodo="semana">Esta Semana (7 días)</button>
+        <button class="tab-btn" data-periodo="mes">Este Mes (30 días)</button>
+        <button class="tab-btn" data-periodo="ciclo">Ciclo Completo</button>
+      </div>
+
+      <!-- Resumen del Período -->
+      <div class="period-summary">
+        <div class="summary-item">
+          <span class="num" id="asistTotal">0</span>
+          <span class="label">Total Marcajes</span>
+        </div>
+        <div class="summary-item">
+          <span class="num" id="asistEntradas" style="color: var(--ok);">0</span>
+          <span class="label">Entradas</span>
+        </div>
+        <div class="summary-item">
+          <span class="num" id="asistSalidas" style="color: var(--brand);">0</span>
+          <span class="label">Salidas</span>
+        </div>
+      </div>
+
+      <!-- Tabla de Marcajes -->
+      <div class="table-responsive" style="max-height: 340px; overflow-y: auto;">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Fecha y Hora (Guatemala)</th>
+              <th>Tipo de Registro</th>
+              <th>Estado</th>
+            </tr>
+          </thead>
+          <tbody id="tblHistorialAsistencias">
+            <tr>
+              <td colspan="3" class="empty">Selecciona un estudiante para consultar su historial.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="modal-footer" style="margin-top: 18px;">
+        <button id="btnCerrarHistorial" class="btn-secondary" type="button">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Lógica JavaScript -->
+  <script src="js/estudiantes.js"></script>
+</body>
+
+</html>

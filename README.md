@@ -13,14 +13,18 @@ Ya se comprobó localmente: recepción de JSON con FastAPI, conexión a MariaDB,
 | GET `/api/asistencia` | Implementado; permite registro directo por enlace web NFC |
 | GET `/api/dashboard` | Implementado; consulta asistencias de hoy, total y alertas de IA desde MariaDB |
 | PATCH `/api/alertas/{id}` | Implementado; marca alertas de IA como revisadas en la base de datos |
+| GET/POST/PUT `/api/estudiantes` | Implementado; CRUD completo de estudiantes y asignación por establecimiento |
+| GET `/api/estudiantes/{id}/asistencias` | Implementado; historial de marcajes del estudiante por período (semana, mes, ciclo) |
+| GET `/api/opciones_academicas` | Implementado; consulta ciclos escolares, grados y secciones |
 | Dashboard Web en tiempo real | Implementado (`Panel_de_asistencia.html`) con sondeo periódico hacia la API |
+| Módulo Web de Estudiantes | Implementado (`Estudiantes.html`) con listado, creación, edición, estado e historial |
 | Control de duplicados | Implementado por `id_evento` único |
 | Conversión de hora del marcaje a UTC | Implementada |
 | Prueba con tarjeta física NFC | Realizada exitosamente con UID real y sincronizada en vivo con el dashboard |
-| Lectura NFC automática desde el teléfono | En desarrollo; responsabilidad de Juan mediante app Android nativa |
-| Base de datos en la nube | Pendiente; actualmente local en MariaDB/Docker |
+| Lectura NFC automática desde el teléfono | Implementado en app Android nativa (APK beta generado) |
+| Base de datos en la nube | Desplegado en producción (BanaHosting / MariaDB / LiteSpeed) |
 | Modelo de IA | Semana 2; base de datos preparada con tablas y vistas (`alerta_ia`, `vw_alertas_abiertas`) |
-| Autenticación de usuarios | Pendiente para etapas posteriores |
+| Autenticación de usuarios | Implementado en `/api/login` con hashing Bcrypt |
 
 La API acepta UID y establecimiento con formato válido, pero todavía no comprueba si existen o si la tarjeta pertenece a un alumno. Una lectura guardada no prueba por sí sola la presencia de ese alumno. El control de duplicados evita reintentos del mismo evento, no dos lecturas físicas que tengan UUID diferentes.
 
@@ -41,8 +45,16 @@ Aunque el equipo acordó MySQL, el servidor observado actualmente es **MariaDB 1
 
 | Archivo o carpeta | Función |
 |---|---|
-| `main.py` | Modelos de entrada y endpoints FastAPI |
+| `main.py` | Modelos de entrada, enrutamiento estático y endpoints FastAPI |
+| `dashboard_api.py` | Router para endpoints del dashboard, CRUD de estudiantes e historial de asistencias |
 | `database.py` | Lectura de `.env`, creación de `engine` y prueba de conexión |
+| `bdasistechs.sql` | Script SQL completo de la base de datos `asistech` con tablas, vistas, roles y gestión académica |
+| `login.html` | Interfaz de inicio de sesión de usuarios |
+| `Panel_de_asistencia.html` | Panel de control web principal con métricas, lecturas en vivo y alertas |
+| `Estudiantes.html` | Módulo web para gestión/CRUD de estudiantes e historial de marcajes |
+| `js/app.js` | Lógica de sondeo y renderizado en vivo para el panel de asistencia |
+| `js/estudiantes.js` | Lógica cliente para creación, edición e historial de asistencias de estudiantes |
+| `css/styles.css` | Hoja de estilos unificada del sistema ASISTECH |
 | `.env` | Configuración privada de BD (no se sube a Git) |
 | `.env.example` | Plantilla de ejemplo con las variables requeridas para la conexión a la BD |
 | `.gitignore` | Excluir credenciales y archivos generados |
@@ -614,11 +626,19 @@ ORDER BY fecha_hora DESC, id_registro DESC
 LIMIT 20;
 ```
 
-### Dashboard: dependencia pendiente
+### Dashboard y Módulo de Estudiantes (Endpoints Integrados)
 
-Actualmente GET `/api/salud` solo indica que FastAPI responde; no comprueba la BD ni entrega asistencias. **No existe GET `/api/asistencia` ni un endpoint de alertas.** Marcos debe coordinar con Emanuel un endpoint de consulta antes de conectar un dashboard HTML/JS. No poner credenciales de MySQL en JavaScript del navegador. Una alternativa para un prototipo Streamlit es consultar la BD desde el proceso servidor de Streamlit con un usuario de lectura, sin exponer credenciales al navegador.
+Los endpoints necesarios para el dashboard web y la gestión de estudiantes están completamente implementados en `dashboard_api.py`:
 
-Si el frontend consume la API desde otro origen, habrá que habilitar CORS. Esto no forma parte del `main.py` actual. Ejemplo opcional para agregar después de crear `app`, sustituyendo los orígenes por los reales:
+- **`GET /api/dashboard`**: Devuelve total de estudiantes activos, lecturas en vivo del día y alertas pendientes de IA.
+- **`PATCH /api/alertas/{id_alerta}`**: Permite marcar las alertas del modelo de IA como revisadas.
+- **`GET /api/estudiantes`**: Obtiene el listado de estudiantes del establecimiento con filtro de búsqueda por nombre o UID.
+- **`POST /api/estudiantes`**: Registra un nuevo estudiante en la base de datos.
+- **`PUT /api/estudiantes/{id_estudiante}`**: Modifica la información o estado (Activo/Inactivo) de un estudiante.
+- **`GET /api/estudiantes/{id_estudiante}/asistencias`**: Consulta el historial de marcajes de asistencia del estudiante por período (semana, mes o ciclo escolar).
+- **`GET /api/opciones_academicas`**: Devuelve las opciones de ciclos escolares, grados y secciones configurados.
+
+CORS se encuentra habilitado en `main.py` mediante `CORSMiddleware` para permitir peticiones desde el navegador web tanto localmente como en producción.
 
 ```python
 from fastapi.middleware.cors import CORSMiddleware
@@ -1302,4 +1322,31 @@ Resultado verificado del artefacto generado en disco:
    - La aplicación genera un `id_evento` UUIDv4 único y lo envía por HTTPS al backend en BanaHosting, mostrando:
      *"¡Asistencia guardada correctamente! Número de registro: X"*.
    - El registro se visualiza de forma instantánea en el panel de control web (`index.html`) en la tabla `asistencia_nfc`.
+
+---
+
+## 18. Pendientes de Seguridad y Revisiones Posteriores
+
+Durante la revisión de la arquitectura del proyecto (backend en FastAPI, base de datos MariaDB, aplicación Android y panel web), se identificaron los siguientes puntos de seguridad para revisar e implementar en iteraciones posteriores:
+
+### 🔴 Prioridad Alta
+1. **Migración a Autenticación basada en Tokens (JWT / Bearer):**
+   - Actualmente, `/api/login` no emite tokens de sesión JWT ni cookies `HttpOnly`. Los endpoints del dashboard (`GET /api/dashboard`, `PATCH /api/alertas/{id}`) deben protegerse mediante middleware de autenticación para evitar consultas o modificaciones no autorizadas.
+2. **Eliminación del Fallback en Texto Plano para Contraseñas:**
+   - En `main.py` (`verificar_contrasena`), se debe remover la comparación de contraseña en texto plano en caso de que el hash en la BD no comience con el prefijo Bcrypt, asegurando que el 100% de las contraseñas usen únicamente Bcrypt.
+3. **Autenticación en la Ingesta de Marcajes NFC desde Android:**
+   - Implementar un encabezado con firma HMAC o una API Key autorizada en `POST /api/asistencia` para garantizar que únicamente la app móvil oficial pueda enviar registros de asistencia al backend.
+4. **Desactivar Tráfico HTTP No Cifrado en Android:**
+   - Cambiar `android:usesCleartextTraffic="false"` en `AndroidManifest.xml` para asegurar que todo el tráfico transite exclusivamente a través de conexiones cifradas HTTPS/TLS.
+
+### 🟡 Prioridad Media
+1. **Restricción de Orígenes en CORS (`allow_origins`):**
+   - Sustituir `allow_origins=["*"]` en `main.py` por los dominios web autorizados explícitamente (ej. `["https://asistech.divinevo.com"]`).
+2. **Restringir Registro de Asistencia a Métodos `POST`:**
+   - Eliminar el endpoint `GET /api/asistencia` o limitarlo para prevenir vulnerabilidades de tipo Cross-Site Request Forgery (CSRF).
+3. **Limpieza del Esquema de la Base de Datos:**
+   - Eliminar la columna `confirmar_contrasena` de la tabla `usuario` en MariaDB y realizar esta validación únicamente en el cliente/formulario.
+4. **Protección de Credenciales de BD en Entorno:**
+   - Eliminar los valores fallback por defecto (`root`/`root`) en `database.py` y forzar el requerimiento de variables de entorno configuradas explícitamente en `.env`.
+
 
