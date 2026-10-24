@@ -431,6 +431,11 @@
       if (!res.ok) throw new Error('HTTP ' + res.status);
 
       const data = await res.json();
+      if (data.estudiante) {
+        $('#lblAsistenciaNombre').textContent = `Asistencias de ${data.estudiante.nombre}`;
+        const gradoTexto = (data.estudiante.grado || '') + (data.estudiante.seccion ? ' ' + data.estudiante.seccion : '');
+        $('#lblAsistenciaMeta').textContent = `UID: ${data.estudiante.uid_nfc} ${gradoTexto ? '· ' + gradoTexto : ''}`;
+      }
       const logs = Array.isArray(data.asistencias) ? data.asistencias : [];
 
       // Calcular contadores

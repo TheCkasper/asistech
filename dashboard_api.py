@@ -347,20 +347,25 @@ def obtener_asistencias_estudiante(
             if not est:
                 raise HTTPException(status_code=404, detail="Estudiante no encontrado.")
 
-            # Definir ventana de días según el período
-            dias = 7 if periodo == "semana" else 30 if periodo == "mes" else 365
+            # Construir consulta flexible y robusta vinculada al UID del estudiante
+            sql = """
+                SELECT id_registro, id_evento, uid_nfc, id_establecimiento,
+                       fecha_hora, tipo_registro, recibido_en
+                FROM asistencia_nfc
+                WHERE TRIM(UPPER(uid_nfc)) = TRIM(UPPER(:uid))
+            """
+            params = {"uid": est["uid_nfc"]}
 
-            logs = conn.execute(
-                text("""
-                    SELECT id_registro, id_evento, uid_nfc, id_establecimiento,
-                           fecha_hora, tipo_registro, recibido_en
-                    FROM asistencia_nfc
-                    WHERE uid_nfc = :uid AND id_establecimiento = :e
-                      AND fecha_hora >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL :dias DAY)
-                    ORDER BY fecha_hora DESC
-                """),
-                {"uid": est["uid_nfc"], "e": est["id_establecimiento"], "dias": dias}
-            ).mappings().all()
+            # Aplicar filtro de fecha según el período seleccionado
+            if periodo == "semana":
+                sql += " AND fecha_hora >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL 7 DAY)"
+            elif periodo == "mes":
+                sql += " AND fecha_hora >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL 30 DAY)"
+            # En "ciclo" muestra todo el historial histórico del estudiante sin cortar por días
+
+            sql += " ORDER BY fecha_hora DESC"
+
+            logs = conn.execute(text(sql), params).mappings().all()
 
             return {
                 "estudiante": {
