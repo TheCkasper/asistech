@@ -393,6 +393,59 @@ def obtener_asistencias_estudiante(
         raise HTTPException(status_code=500, detail="No se pudieron consultar las asistencias del estudiante.")
 
 
+@router.get("/api/reporte_asistencia")
+def reporte_asistencia(
+    id_establecimiento: int = Query(1, gt=0),
+    grado: Optional[str] = None,
+    seccion: Optional[str] = None,
+    desde: Optional[str] = None,
+    hasta: Optional[str] = None,
+):
+    """Primera entrada y última salida por estudiante y día (día local Guatemala, UTC-6)."""
+    try:
+        with engine.connect() as conn:
+            sql = """
+                SELECT e.nombre, e.uid_nfc, e.grado, e.seccion,
+                       DATE(DATE_SUB(a.fecha_hora, INTERVAL 6 HOUR)) AS dia,
+                       MIN(CASE WHEN a.tipo_registro = 'ENTRADA' THEN a.fecha_hora END) AS entrada,
+                       MAX(CASE WHEN a.tipo_registro = 'SALIDA' THEN a.fecha_hora END) AS salida
+                FROM estudiante e
+                JOIN asistencia_nfc a ON TRIM(UPPER(a.uid_nfc)) = TRIM(UPPER(e.uid_nfc))
+                WHERE e.id_establecimiento = :e
+            """
+            params = {"e": id_establecimiento}
+            if grado and grado.strip():
+                sql += " AND e.grado = :g"
+                params["g"] = grado.strip()
+            if seccion and seccion.strip():
+                sql += " AND e.seccion = :s"
+                params["s"] = seccion.strip()
+            if desde:
+                sql += " AND DATE(DATE_SUB(a.fecha_hora, INTERVAL 6 HOUR)) >= :d"
+                params["d"] = desde
+            if hasta:
+                sql += " AND DATE(DATE_SUB(a.fecha_hora, INTERVAL 6 HOUR)) <= :h"
+                params["h"] = hasta
+            sql += " GROUP BY e.id_estudiante, e.nombre, e.uid_nfc, e.grado, e.seccion, dia"
+            sql += " ORDER BY dia, e.grado, e.seccion, e.nombre"
+            filas = conn.execute(text(sql), params).mappings().all()
+            return [
+                {
+                    "nombre": f["nombre"],
+                    "uid_nfc": f["uid_nfc"],
+                    "grado": f["grado"] or "",
+                    "seccion": f["seccion"] or "",
+                    "dia": str(f["dia"]),
+                    "entrada": _a_iso_utc(f["entrada"]) if f["entrada"] else "",
+                    "salida": _a_iso_utc(f["salida"]) if f["salida"] else "",
+                }
+                for f in filas
+            ]
+    except Exception as err:
+        print(f"[Error en /api/reporte_asistencia] {err}")
+        raise HTTPException(status_code=500, detail="No se pudo generar el reporte.")
+
+
 @router.get("/api/opciones_academicas")
 def obtener_opciones_academicas(id_establecimiento: int = Query(1, gt=0)):
     """Devuelve los ciclos escolares, grados y secciones configurados."""

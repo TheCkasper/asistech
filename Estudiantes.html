@@ -23,7 +23,7 @@
       if (!sesion) {
         window.location.replace('/');
       }
-    } catch (e) {}
+    } catch (e) { }
   </script>
 </head>
 
@@ -39,15 +39,20 @@
       </div>
       <div class="top-actions">
         <a href="/Panel_de_asistencia.html" class="btn-nav-action" title="Volver al panel principal">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -2px; margin-right: 4px;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+            stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -2px; margin-right: 4px;">
             <line x1="19" y1="12" x2="5" y2="12"></line>
             <polyline points="12 19 5 12 12 5"></polyline>
           </svg>
           <span>Panel Principal</span>
         </a>
 
+        <button id="btnListado" class="btn-secondary" type="button">Listado asistencia</button>
+        <button id="btnReporte" class="btn-secondary" type="button">Exportar reporte</button>
+
         <button id="btnNuevoEstudiante" class="btn-primary-sm" type="button">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+            stroke-linecap="round" stroke-linejoin="round">
             <line x1="12" y1="5" x2="12" y2="19"></line>
             <line x1="5" y1="12" x2="19" y2="12"></line>
           </svg>
@@ -91,7 +96,8 @@
         <div class="filters-row">
           <div class="search-box">
             <label for="txtBuscar" class="sr-only">Buscar por nombre, tarjeta NFC o grado</label>
-            <input id="txtBuscar" class="search" type="search" placeholder="Buscar por nombre, tarjeta NFC o grado..." autocomplete="off">
+            <input id="txtBuscar" class="search" type="search" placeholder="Buscar por nombre, tarjeta NFC o grado..."
+              autocomplete="off">
           </div>
           <select id="selFiltroEstado" class="form-select-sm" aria-label="Filtrar por estado">
             <option value="todos">Todos los estados</option>
@@ -141,7 +147,8 @@
 
         <div class="form-group">
           <label for="txtUidNfc">Código Tarjeta NFC (UID) <span class="req">*</span></label>
-          <input id="txtUidNfc" class="form-input" type="text" placeholder="Ej: 04A1B2C3D4" style="text-transform: uppercase;" required>
+          <input id="txtUidNfc" class="form-input" type="text" placeholder="Ej: 04A1B2C3D4"
+            style="text-transform: uppercase;" required>
           <small class="hint-input">Hexadecimal en mayúsculas sin espacios ni guiones.</small>
         </div>
 
@@ -249,7 +256,82 @@
     </div>
   </div>
 
+  <!-- MODAL: LISTADO DE ASISTENCIA MENSUAL -->
+  <div id="modalListado" class="modal-backdrop" aria-hidden="true">
+    <div class="modal-card" role="dialog" aria-labelledby="lblListadoTitulo">
+      <div class="modal-header">
+        <h2 id="lblListadoTitulo">Listado de asistencia mensual</h2>
+        <button id="btnCerrarListado" class="btn-icon" type="button" aria-label="Cerrar modal">&times;</button>
+      </div>
+      <div id="msgListado" class="msg-box" style="display:none;" role="alert"></div>
+      <div class="modal-form">
+        <div class="form-row">
+          <div class="form-group col-half">
+            <label for="selLisMes">Mes</label>
+            <select id="selLisMes" class="form-input"></select>
+          </div>
+          <div class="form-group col-half">
+            <label for="txtLisAnio">Año</label>
+            <input id="txtLisAnio" class="form-input" type="number" min="2000" max="2100">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group col-half">
+            <label for="selLisGrado">Grado</label>
+            <select id="selLisGrado" class="form-input"></select>
+          </div>
+          <div class="form-group col-half">
+            <label for="selLisSeccion">Sección</label>
+            <select id="selLisSeccion" class="form-input"></select>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button id="btnLisPdf" class="btn-primary" type="button">Generar PDF</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: EXPORTAR REPORTE -->
+  <div id="modalReporte" class="modal-backdrop" aria-hidden="true">
+    <div class="modal-card" role="dialog" aria-labelledby="lblReporteTitulo">
+      <div class="modal-header">
+        <h2 id="lblReporteTitulo">Exportar reporte de asistencia</h2>
+        <button id="btnCerrarReporte" class="btn-icon" type="button" aria-label="Cerrar modal">&times;</button>
+      </div>
+      <div id="msgReporte" class="msg-box" style="display:none;" role="alert"></div>
+      <div class="modal-form">
+        <div class="form-row">
+          <div class="form-group col-half">
+            <label for="selRepGrado">Grado</label>
+            <select id="selRepGrado" class="form-input"></select>
+          </div>
+          <div class="form-group col-half">
+            <label for="selRepSeccion">Sección</label>
+            <select id="selRepSeccion" class="form-input"></select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group col-half">
+            <label for="txtRepDesde">Desde</label>
+            <input id="txtRepDesde" class="form-input" type="date">
+          </div>
+          <div class="form-group col-half">
+            <label for="txtRepHasta">Hasta</label>
+            <input id="txtRepHasta" class="form-input" type="date">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button id="btnRepExcel" class="btn-secondary" type="button">Excel</button>
+          <button id="btnRepPdf" class="btn-primary" type="button">PDF</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Lógica JavaScript -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
   <script src="js/estudiantes.js"></script>
 </body>
 

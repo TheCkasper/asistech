@@ -16,6 +16,7 @@ Ya se comprobó localmente: recepción de JSON con FastAPI, conexión a MariaDB,
 | GET/POST/PUT `/api/estudiantes` | Implementado; CRUD completo de estudiantes y asignación por establecimiento |
 | GET `/api/estudiantes/{id}/asistencias` | Implementado; historial de marcajes del estudiante por período (semana, mes, ciclo) |
 | GET `/api/opciones_academicas` | Implementado; consulta ciclos escolares, grados y secciones |
+| GET `/api/reporte_asistencia` | Implementado; primera entrada y última salida por estudiante y día, filtrable por grado, sección y fechas |
 | Dashboard Web en tiempo real | Implementado (`Panel_de_asistencia.html`) con sondeo periódico hacia la API |
 | Módulo Web de Estudiantes | Implementado (`Estudiantes.html`) con listado, creación, edición, estado e historial |
 | Control de duplicados | Implementado por `id_evento` único |
@@ -637,6 +638,21 @@ Los endpoints necesarios para el dashboard web y la gestión de estudiantes est�
 - **`PUT /api/estudiantes/{id_estudiante}`**: Modifica la información o estado (Activo/Inactivo) de un estudiante.
 - **`GET /api/estudiantes/{id_estudiante}/asistencias`**: Consulta el historial de marcajes de asistencia del estudiante por período (semana, mes o ciclo escolar).
 - **`GET /api/opciones_academicas`**: Devuelve las opciones de ciclos escolares, grados y secciones configurados.
+- **`GET /api/reporte_asistencia`**: Parámetros opcionales `id_establecimiento`, `grado`, `seccion`, `desde` y `hasta` (`YYYY-MM-DD`, día local de Guatemala, UTC-6). Devuelve por estudiante y día `nombre`, `uid_nfc`, `grado`, `seccion`, `dia`, `entrada` (primera ENTRADA) y `salida` (última SALIDA), en ISO UTC. Solo aparecen los días con al menos un marcaje.
+
+#### Reportes en PDF y Excel (vista `Estudiantes.html`)
+
+Los botones se encuentran en la cabecera de la vista de estudiantes (`Estudiantes.html` + `js/estudiantes.js`). Cada uno abre una ventana emergente para elegir los filtros.
+
+- **Exportar reporte**: filtros grado, sección, desde y hasta. Columnas: Fecha, Estudiante, UID tarjeta, Grado, Hora entrada y Hora salida. Se descarga como **PDF** (jsPDF + jsPDF-AutoTable) o **Excel** (`.xls` en formato HTML, Excel puede mostrar un aviso de formato).
+- **Listado asistencia**: filtros mes, año, grado y sección (opcional). Genera un PDF horizontal "LISTA DE ASISTENCIA" con la escuela **UMG** (constante `NOMBRE_ESCUELA` en `estudiantes.js`), solo con los estudiantes activos del grado y sección elegidos, días hábiles (lunes a viernes) agrupados por semana, `%` de asistencia, fila "Asistencias del día", total de alumnos, promedio y espacio de firma.
+  - **A**: marcó entrada y salida ese día.
+  - **R**: marcó solo entrada o solo salida.
+  - **F**: sin ningún marcaje.
+  - Los días futuros quedan en blanco; los feriados salen como F porque el sistema no los conoce. El `%` se calcula como A sobre los días ya transcurridos.
+  - La tabla `estudiante` no guarda género ni docente, por lo que esos campos del formato original no se incluyen.
+
+Las librerías PDF se cargan desde `cdnjs.cloudflare.com`, por lo que la generación de PDF requiere conexión a internet.
 
 CORS se encuentra habilitado en `main.py` mediante `CORSMiddleware` para permitir peticiones desde el navegador web tanto localmente como en producción.
 

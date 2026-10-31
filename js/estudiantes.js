@@ -491,8 +491,325 @@
     }
   }
 
+  /* ---------- EXPORTAR REPORTE (PDF / EXCEL) ---------- */
+  function hoyGT() {
+    const o = {};
+    FMT.formatToParts(new Date()).forEach((p) => { o[p.type] = p.value; });
+    return `${o.year}-${o.month}-${o.day}`;
+  }
+
+  function horaGT(v) {
+    if (!v) return '—';
+    const o = {};
+    FMT.formatToParts(toDate(v)).forEach((p) => { o[p.type] = p.value; });
+    return `${pad(o.hour)}:${pad(o.minute)}`;
+  }
+
+  function llenarSelect(sel, valores) {
+    sel.innerHTML = '';
+    sel.append(h('option', { value: '' }, 'Todos'));
+    valores.forEach((v) => sel.append(h('option', { value: v }, v)));
+  }
+
+  function mostrarMsgReporte(texto) {
+    const msg = $('#msgReporte');
+    msg.textContent = texto;
+    msg.className = 'msg-box error';
+    msg.style.display = 'block';
+  }
+
+  function abrirModalReporte() {
+    const uniq = (k) => [...new Set(estudiantesCache.map((e) => e[k]).filter(Boolean))].sort();
+    llenarSelect($('#selRepGrado'), uniq('grado'));
+    llenarSelect($('#selRepSeccion'), uniq('seccion'));
+    const hoy = hoyGT();
+    $('#txtRepDesde').value = hoy;
+    $('#txtRepHasta').value = hoy;
+    $('#msgReporte').style.display = 'none';
+    const m = $('#modalReporte');
+    m.setAttribute('aria-hidden', 'false');
+    m.classList.add('show');
+  }
+
+  function cerrarModalReporte() {
+    const m = $('#modalReporte');
+    m.setAttribute('aria-hidden', 'true');
+    m.classList.remove('show');
+  }
+
+  async function obtenerDatosReporte() {
+    const p = new URLSearchParams({
+      id_establecimiento: CONFIG.ID_ESTABLECIMIENTO,
+      grado: $('#selRepGrado').value,
+      seccion: $('#selRepSeccion').value,
+      desde: $('#txtRepDesde').value,
+      hasta: $('#txtRepHasta').value
+    });
+    try {
+      const res = await fetch(getApiUrl('/api/reporte_asistencia?' + p.toString()));
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const filas = await res.json();
+      if (!filas.length) {
+        mostrarMsgReporte('No hay asistencias para los filtros seleccionados.');
+        return null;
+      }
+      $('#msgReporte').style.display = 'none';
+      return filas;
+    } catch (e) {
+      mostrarMsgReporte('No se pudo generar el reporte.');
+      return null;
+    }
+  }
+
+  const escHtml = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+  function tablaReporteHtml(filas) {
+    const cab = ['Fecha', 'Estudiante', 'UID tarjeta', 'Grado', 'Hora entrada', 'Hora salida'];
+    const cuerpo = filas.map((f) => [
+      f.dia, f.nombre, f.uid_nfc,
+      (f.grado || '') + (f.seccion ? ' - ' + f.seccion : ''),
+      horaGT(f.entrada), horaGT(f.salida)
+    ]);
+    return '<table border="1" cellspacing="0" cellpadding="5" style="border-collapse:collapse;font-family:Arial;font-size:12px">'
+      + '<thead><tr>' + cab.map((c) => `<th style="background:#e8eef7">${c}</th>`).join('') + '</tr></thead><tbody>'
+      + cuerpo.map((r) => '<tr>' + r.map((c) => `<td style="mso-number-format:'\\@'">${escHtml(c)}</td>`).join('') + '</tr>').join('')
+      + '</tbody></table>';
+  }
+
+  function tituloReporte() {
+    const g = $('#selRepGrado').value || 'Todos los grados';
+    const s = $('#selRepSeccion').value || 'todas las secciones';
+    return `Reporte de asistencia — ${g}, ${s} (${$('#txtRepDesde').value} a ${$('#txtRepHasta').value})`;
+  }
+
+  async function exportarExcel() {
+    const filas = await obtenerDatosReporte();
+    if (!filas) return;
+    const html = '<html xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="utf-8"></head><body>'
+      + tablaReporteHtml(filas) + '</body></html>';
+    const blob = new Blob(['\ufeff', html], { type: 'application/vnd.ms-excel' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `reporte_asistencia_${$('#txtRepDesde').value}_${$('#txtRepHasta').value}.xls`;
+    document.body.append(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  }
+
+  async function exportarPdf() {
+    const filas = await obtenerDatosReporte();
+    if (!filas) return;
+    if (!window.jspdf) {
+      mostrarMsgReporte('No se pudo cargar la librería PDF (revisa tu conexión a internet).');
+      return;
+    }
+    const doc = new window.jspdf.jsPDF({ orientation: 'landscape' });
+    doc.setFontSize(13);
+    doc.text(tituloReporte(), 14, 15);
+    doc.autoTable({
+      startY: 22,
+      head: [['Fecha', 'Estudiante', 'UID tarjeta', 'Grado', 'Hora entrada', 'Hora salida']],
+      body: filas.map((f) => [f.dia, f.nombre, f.uid_nfc, (f.grado || '') + (f.seccion ? ' - ' + f.seccion : ''), horaGT(f.entrada), horaGT(f.salida)]),
+      styles: { fontSize: 10 },
+      headStyles: { fillColor: [37, 99, 235] }
+    });
+    doc.save('reporte_asistencia_' + $('#txtRepDesde').value + '_' + $('#txtRepHasta').value + '.pdf');
+  }
+
+  /* ---------- LISTADO DE ASISTENCIA MENSUAL (PDF) ---------- */
+  const NOMBRE_ESCUELA = 'UMG';
+  const MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+  const LETRAS_DIA = ['D', 'L', 'M', 'M', 'J', 'V', 'S'];
+
+  function mostrarMsgListado(texto) {
+    const msg = $('#msgListado');
+    msg.textContent = texto;
+    msg.className = 'msg-box error';
+    msg.style.display = 'block';
+  }
+
+  function abrirModalListado() {
+    const uniq = (k) => [...new Set(estudiantesCache.map((e) => e[k]).filter(Boolean))].sort();
+    const selG = $('#selLisGrado');
+    const selS = $('#selLisSeccion');
+    selG.innerHTML = '';
+    uniq('grado').forEach((v) => selG.append(h('option', { value: v }, v)));
+    llenarSelect(selS, uniq('seccion'));
+    selS.options[0].textContent = 'Todas';
+
+    const selMes = $('#selLisMes');
+    selMes.innerHTML = '';
+    MESES.forEach((m, i) => selMes.append(h('option', { value: String(i + 1) }, m)));
+    const hoy = hoyGT().split('-');
+    selMes.value = String(parseInt(hoy[1], 10));
+    $('#txtLisAnio').value = hoy[0];
+    $('#msgListado').style.display = 'none';
+
+    const m = $('#modalListado');
+    m.setAttribute('aria-hidden', 'false');
+    m.classList.add('show');
+  }
+
+  function cerrarModalListado() {
+    const m = $('#modalListado');
+    m.setAttribute('aria-hidden', 'true');
+    m.classList.remove('show');
+  }
+
+  async function generarListadoPdf() {
+    if (!window.jspdf) {
+      mostrarMsgListado('No se pudo cargar la librería PDF (revisa tu conexión a internet).');
+      return;
+    }
+    const mes = parseInt($('#selLisMes').value, 10);
+    const anio = parseInt($('#txtLisAnio').value, 10);
+    const grado = $('#selLisGrado').value;
+    const seccion = $('#selLisSeccion').value;
+    if (!anio || !grado) {
+      mostrarMsgListado('Selecciona el grado y el año.');
+      return;
+    }
+
+    // Estudiantes activos del grado/sección elegidos (solo filas con datos, sin espacios vacíos)
+    const alumnos = estudiantesCache
+      .filter((e) => e.activo && e.grado === grado && (!seccion || e.seccion === seccion))
+      .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
+    if (!alumnos.length) {
+      mostrarMsgListado('No hay estudiantes activos para ese grado y sección.');
+      return;
+    }
+
+    // Días hábiles (lunes a viernes) del mes, agrupados por semana
+    const ultimo = new Date(Date.UTC(anio, mes, 0)).getUTCDate();
+    const dias = [];
+    for (let d = 1; d <= ultimo; d++) {
+      const dt = new Date(Date.UTC(anio, mes - 1, d));
+      const dow = dt.getUTCDay();
+      if (dow === 0 || dow === 6) continue;
+      const clave = `${anio}-${pad(mes)}-${pad(d)}`;
+      const lunes = d - (dow - 1);
+      dias.push({ clave, letra: LETRAS_DIA[dow], semana: lunes });
+    }
+    const semanas = [];
+    dias.forEach((d) => {
+      let s = semanas[semanas.length - 1];
+      if (!s || s.id !== d.semana) { s = { id: d.semana, dias: [] }; semanas.push(s); }
+      s.dias.push(d);
+    });
+
+    // Marcajes del mes
+    const p = new URLSearchParams({
+      id_establecimiento: CONFIG.ID_ESTABLECIMIENTO,
+      grado: grado,
+      seccion: seccion,
+      desde: `${anio}-${pad(mes)}-01`,
+      hasta: `${anio}-${pad(mes)}-${pad(ultimo)}`
+    });
+    let filas;
+    try {
+      const res = await fetch(getApiUrl('/api/reporte_asistencia?' + p.toString()));
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      filas = await res.json();
+    } catch (e) {
+      mostrarMsgListado('No se pudieron consultar las asistencias.');
+      return;
+    }
+    const marcas = {};
+    filas.forEach((f) => { marcas[`${String(f.uid_nfc).toUpperCase()}|${f.dia}`] = f; });
+
+    // A = entrada y salida, R = solo una, F = ninguna. Días futuros quedan en blanco.
+    const hoy = hoyGT();
+    const estado = (uid, dia) => {
+      if (dia > hoy) return '';
+      const f = marcas[`${String(uid).toUpperCase()}|${dia}`];
+      if (!f) return 'F';
+      if (f.entrada && f.salida) return 'A';
+      return 'R';
+    };
+    const diasEvaluados = dias.filter((d) => d.clave <= hoy);
+
+    const body = alumnos.map((e, i) => {
+      const celdas = dias.map((d) => estado(e.uid_nfc, d.clave));
+      const asist = celdas.filter((c) => c === 'A').length;
+      const pct = diasEvaluados.length ? Math.round((asist / diasEvaluados.length) * 100) : '';
+      return [String(i + 1), e.nombre, ...celdas, pct === '' ? '' : String(pct)];
+    });
+
+    // Fila "Asistencias del día"
+    const totalesDia = dias.map((d, k) => (d.clave > hoy ? '' : String(body.filter((r) => r[2 + k] === 'A').length)));
+    const promedio = diasEvaluados.length
+      ? (totalesDia.filter((t) => t !== '').reduce((a, t) => a + Number(t), 0) / diasEvaluados.length)
+      : 0;
+    body.push(['', 'ASISTENCIAS DEL DÍA', ...totalesDia, '']);
+
+    // Cabeceras
+    const head1 = [
+      { content: 'No.', rowSpan: 2 }, { content: 'NOMBRE', rowSpan: 2 },
+      ...semanas.map((s, i) => ({ content: 'SEMANA ' + (i + 1), colSpan: s.dias.length })),
+      { content: '%', rowSpan: 2 }
+    ];
+    const head2 = dias.map((d) => d.letra);
+
+    const doc = new window.jspdf.jsPDF({ orientation: 'landscape', format: 'a4' });
+    doc.setFontSize(16);
+    doc.text('LISTA DE ASISTENCIA', 148.5, 12, { align: 'center' });
+    doc.setFontSize(11);
+    doc.text(`${MESES[mes - 1].toUpperCase()} ${anio}`, 148.5, 18, { align: 'center' });
+    doc.setFontSize(10);
+    doc.text(`NOMBRE DE LA ESCUELA: ${NOMBRE_ESCUELA}`, 14, 26);
+    doc.text(`GRADO: ${grado}`, 120, 26);
+    doc.text(`SECCIÓN: ${seccion || 'Todas'}`, 200, 26);
+
+    const ultimaFila = body.length - 1;
+    const colores = { A: [198, 239, 206], R: [255, 217, 160], F: [255, 199, 206] };
+    doc.autoTable({
+      startY: 30,
+      head: [head1, head2],
+      body: body,
+      theme: 'grid',
+      styles: { fontSize: 8, cellPadding: 1.2, halign: 'center', lineColor: [0, 0, 0], lineWidth: 0.15, textColor: 20 },
+      headStyles: { fillColor: [68, 114, 196], textColor: 255 },
+      columnStyles: { 1: { halign: 'left', cellWidth: 55 } },
+      didParseCell: (data) => {
+        if (data.section !== 'body') return;
+        if (data.row.index === ultimaFila) {
+          data.cell.styles.fontStyle = 'bold';
+          data.cell.styles.fillColor = [226, 239, 218];
+          return;
+        }
+        if (data.column.index >= 2 && data.column.index < 2 + dias.length) {
+          const c = colores[data.cell.raw];
+          if (c) data.cell.styles.fillColor = c;
+        }
+      }
+    });
+
+    let y = doc.lastAutoTable.finalY + 8;
+    if (y > 180) { doc.addPage(); y = 20; }
+    doc.setFontSize(10);
+    doc.text(`TOTAL DE ALUMNOS: ${alumnos.length}`, 14, y);
+    doc.text(`PROMEDIO TOTAL: ${promedio.toFixed(2)}`, 90, y);
+    doc.text('A = Asistió (entrada y salida)   R = Registro incompleto (solo entrada o solo salida)   F = Falta', 14, y + 7);
+    doc.line(14, y + 22, 90, y + 22);
+    doc.text('NOMBRE Y FIRMA DEL PROFESOR', 14, y + 27);
+    doc.text('FECHA DE ENTREGA', 130, y + 27);
+
+    doc.save(`lista_asistencia_${MESES[mes - 1].toLowerCase()}_${anio}_${grado.replace(/\s+/g, '')}${seccion || ''}.pdf`);
+    $('#msgListado').style.display = 'none';
+  }
+
   /* ---------- INICIALIZACIÓN Y EVENT LISTENERS ---------- */
   document.addEventListener('DOMContentLoaded', () => {
+    $('#btnReporte').addEventListener('click', abrirModalReporte);
+    $('#btnCerrarReporte').addEventListener('click', cerrarModalReporte);
+    $('#btnRepExcel').addEventListener('click', exportarExcel);
+    $('#btnRepPdf').addEventListener('click', exportarPdf);
+
+    $('#btnListado').addEventListener('click', abrirModalListado);
+    $('#btnCerrarListado').addEventListener('click', cerrarModalListado);
+    $('#btnLisPdf').addEventListener('click', generarListadoPdf);
+
     // 1. Nombre de usuario en cabecera
     try {
       const rawSesion = localStorage.getItem('asistech_user');
@@ -506,13 +823,13 @@
           userChip.style.display = 'inline-flex';
         }
       }
-    } catch (e) {}
+    } catch (e) { }
 
     // 2. Cerrar sesión
     const btnLogout = $('#btnLogout');
     if (btnLogout) {
       btnLogout.addEventListener('click', () => {
-        try { localStorage.removeItem('asistech_user'); } catch (e) {}
+        try { localStorage.removeItem('asistech_user'); } catch (e) { }
         window.location.replace('/');
       });
     }
